@@ -1,0 +1,21 @@
+Skipped
+=======
+
+- "first and third" -- super complex coreference
+If the first and third of three consecutive even integers are added, the result is 12 less than three times the second integer. find the integers.
+
+- "have a sum of"
+what three consecutive odd integers have a sum of -75?
+
+- sentence formation of "If <something> the result is <something>" (should be achievable)
+The sum of two numbers is 64. If twice the smaller number is subtracted from the larger number, the result is 16. Find the two numbers.
+One number is 16 more than another. If the smaller number is subtracted from 2/3 of the larger, the result is 1/4 of the sum of the two numbers. Find the numbers.
+
+- gives us the eqn x, x+1, etc.
+Three times the sum of three consecutive integers x, x + 1, and x + 2, is 72. What are the integers?
+
+- Right now we just parse 2y = 17 + z .. miss the constraint of x = y - 1 = z - 2
+Find 3 consecutive numbers such that twice the second is 17 more than the third.
+
+- digit manipulation
+a no. has two digits whose sum is 14. if 36 is added to the no., its digits are interchanged. find the no.

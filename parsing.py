@@ -25,7 +25,7 @@ from itertools import product
 from six import StringIO
 from types import FunctionType
 
-MAX_CELL_CAPACITY = 10000  # upper bound on number of parses in one chart cell
+MAX_CELL_CAPACITY = 125000  # upper bound on number of parses in one chart cell
 
 
 # Rule =========================================================================
