@@ -1,4 +1,6 @@
 import re
+import json
+import sys
 
 from collections import defaultdict
 from numbers import Number
@@ -19,21 +21,44 @@ NUMBERS = [str(num2words(i)) for i in range(500)]
 def str2tree(s):
     return Tree.fromstring(s)
 
+def preprocess(question):
+    # TODO: we could do a lot of good stuff here
+    split = re.findall(r"[\w\-']+|[.,!?;]", question.lower())
+    text = " ".join(split)
+    return text
+
+def make_examples(filename):
+    examples = []
+    with open(filename) as f:
+        raw = json.load(f)
+        for raw_example in raw:
+            # TODO: support multiple anser
+            examples.append(
+                Example(input=preprocess(raw_example['text']),
+                    denotation=raw_example['ans_simple'])
+            )
+    return examples
+
 class WordProbDomain(Domain):
 
+    # TODO: Segment examples into train/dev/test
     def train_examples(self):
-        return [
-            Example(input="the sum of an integer and its square is 72", semantics=('+', 1, 1), denotation=8),
-        ]
+        return make_examples('curated-data/non-yahoo-questions-dev.json')
 
     def test_examples(self):
-        return [
-        ]
+        return make_examples('curated-data/non-yahoo-questions-test.json')
 
     def dev_examples(self):
-        return self.train_examples()
+        return make_examples('curated-data/non-yahoo-questions-dev.json')
 
+    def features(self, parse):
+        features = rule_features(parse)
+        return features
 
+    def execute(self, semantics):
+        # TODO: here is where we solve the problem given the Constraints
+        # that we parse out
+        pass
 
     def rules(self):
         rules = []
@@ -41,8 +66,6 @@ class WordProbDomain(Domain):
         def push_list(head, tail):
             return [head] + [tail]
 
-        # Integers in range [-100, 100]
-        # Need word numbers
         for i, w in enumerate(NUMBERS):
             rules.append(Rule('$Num', str(i), i))
             rules.append(Rule('$Num', w, i))
@@ -109,7 +132,7 @@ class WordProbDomain(Domain):
             Rule('$Integers', 'numbers'),
 
             # MidOperator
-            Rule('$Expr', '$Expr $MidOperator $Expr', lambda sems: (sems[1], sems[0], sems[2])),
+            Rule('$Expr', '$Expr $MidOperator $Expr', lambda sems: (sems[1], sems[2], sems[0])),
             Rule('$MidOperator', 'plus', '+'),
             Rule('$MidOperator', 'minus', '+'),
             Rule('$MidOperator', 'times', '*'),
@@ -134,8 +157,6 @@ class WordProbDomain(Domain):
             Rule('$SplitComparison', 'is less than', '-'),
             Rule('$By', 'by'),
         ])
-
-
 
         rules.extend([
             # Properties
@@ -182,18 +203,20 @@ class WordProbDomain(Domain):
     def training_metric(self):
         return DenotationAccuracyMetric()
 
-def preprocess(question):
-    split = re.findall(r"[\w\-']+|[.,!?;]", question.lower())
-    text = " ".join(split)
-    return text
-
 if __name__ == "__main__":
     domain = WordProbDomain()
     grammar = domain.grammar()
-    parses = grammar.parse_input(preprocess('the sum of two consecutive integers is 185'))
+
+    input = " ".join(sys.argv[1:])
+    print input
+    parses = grammar.parse_input(preprocess(input))
+
     print len(parses)
     for _, v in {str(s): s for s in [p.semantics for p in parses]}.iteritems():
         print v
     if len(parses) == 0:
         print 'no parses'
     # print str2tree(str(parses[0])).pprint()
+
+    # Running this is sad and will make you unhappy :(
+    # evaluate_for_domain(WordProbDomain())
