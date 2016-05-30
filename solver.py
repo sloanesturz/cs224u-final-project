@@ -41,4 +41,12 @@ class SympySolver():
 		print sympy_exprs
 		symbols = createSymbols(num_variables)
 		
-		return solve(sympy_exprs, symbols)  # unpack symbols into parameters
+		answer_dict = solve(sympy_exprs, symbols)  # unpack symbols into parameters
+
+		# we need to get the output into a format that we can compare with
+		# the answers in the json file
+		answer_array = []
+		for variable, answer in answer_dict.iteritems():
+			answer_array.append(answer)
+
+		return answer_array 

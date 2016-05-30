@@ -26,6 +26,7 @@ def preprocess(question):
     # TODO: we could do a lot of good stuff here
     split = re.findall(r"[\w\-']+|[.,!?;]", question.lower())
     text = " ".join(split)
+    print text
     return text
 
 def make_examples(filename):
@@ -65,7 +66,7 @@ class WordProbDomain(Domain):
         return make_examples('curated-data/non-yahoo-questions-test.json')
 
     def dev_examples(self):
-        return make_examples('curated-data/non-yahoo-questions-dev.json')
+        return make_examples('curated-data/small-dev-set.json')
 
     def features(self, parse):
         features = rule_features(parse)
@@ -251,4 +252,4 @@ if __name__ == "__main__":
     # print str2tree(str(parses[0])).pprint()
 
     # Running this is sad and will make you unhappy :(
-    # evaluate_for_domain(WordProbDomain())
+    evaluate_dev_examples_for_domain(WordProbDomain())
