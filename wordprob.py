@@ -9,9 +9,23 @@ from parsing import Grammar, Rule, print_grammar, compute_semantics
 from scoring import rule_features
 
 from nltk.tree import Tree
+from solver import SympySolver
 
 def str2tree(s):
     return Tree.fromstring(s)
+
+def _convertSemanticsToEqn(semantics):
+    if (type(semantics) is int) or len(semantics) == 1:
+        # base case
+        if semantics == "=":
+            semantics = "=="
+        return str(semantics)
+    elif len(semantics) == 2:
+        return _convertSemanticsToEqn(semantics[1][0]) + str(semantics[0])  + _convertSemanticsToEqn(semantics[1][1])
+
+    else:
+        return _convertSemanticsToEqn(semantics[1]) + _convertSemanticsToEqn(semantics[0]) + _convertSemanticsToEqn(semantics[2])
+
 
 class WordProbDomain(Domain):
 
@@ -46,13 +60,13 @@ class WordProbDomain(Domain):
             Rule('$ExprList', '$Expr $And $Expr', lambda sems: (sems[0], sems[2])),
             Rule('$ExprList', 'two numbers', ('x', 'y')),
             Rule('$And', 'and'),
-            Rule('$Combo', 'sum of', 'sum'),
-            Rule('$Combo', 'difference of', 'diff'),
+            Rule('$Combo', 'sum of', '+'),
+            Rule('$Combo', 'difference of', '-'),
             # Rule('$Combo', 'product of', 'times'),
             Rule('$Expr', '$Num', lambda sems: (sems[0])),
             Rule('$Var', 'an integer', 'x'),
             Rule('$Expr', '$Var', lambda sems: (sems[0])),
-            Rule('$Expr', 'its square', ('square', 'x')),
+            Rule('$Expr', 'its square', ('**', ('x', 2))),
             Rule('$Equals', 'is', '='),
         ])
 
@@ -104,9 +118,17 @@ class WordProbDomain(Domain):
     }
 
     def execute(self, semantics):
+        eqn_as_string = _convertSemanticsToEqn(semantics[0][0])
+
+        # solve the equations
+        solver = SympySolver()
+        solver.our_evaluate(eqn_as_string)
+
         if isinstance(semantics, tuple):
             op = self.ops[semantics[0]]
             args = [self.execute(arg) for arg in semantics[1:]]
+            print "op: " + op
+            print "args: " + args
             return op(*args)
         else:
             return semantics
@@ -116,15 +138,18 @@ class WordProbDomain(Domain):
 
 
 domain = WordProbDomain()
+# evaluate_dev_examples_for_domain(domain)
 grammar = domain.grammar()
 parses = grammar.parse_input('sum of two numbers is 72')
+parses = grammar.parse_input('sum of an integer and its square is 72')
 # parses = grammar.parse_input('difference of two numbers is 18 sum of two numbers is 72')
 if len(parses) == 0:
     print 'no parses'
 else:
     for p in parses:
-        str2tree(str(p)).pprint()
+        # str2tree(str(p)).pprint()
         print "-"
-        print compute_semantics(p)
+        semantics = compute_semantics(p)
+        domain.execute(semantics)
 # print_grammar(grammar)
 # print grammar.parse_input('foo')

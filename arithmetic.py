@@ -13,7 +13,7 @@ from domain import Domain
 from example import Example
 from experiment import evaluate_for_domain, evaluate_dev_examples_for_domain, train_test, train_test_for_domain, interact, learn_lexical_semantics, generate
 from metrics import DenotationAccuracyMetric
-from parsing import Grammar, Rule
+from parsing import Grammar, Rule, compute_semantics
 from scoring import rule_features
 
 # ArithmeticDomain =============================================================
@@ -293,7 +293,20 @@ def train_on_dev_experiment():
 # ==============================================================================
 
 if __name__ == '__main__':
-    evaluate_for_domain(ArithmeticDomain())
+    # evaluate_for_domain(ArithmeticDomain())
+
+    domain = ArithmeticDomain()
+    # evaluate_dev_examples_for_domain(domain)
+    grammar = domain.grammar()
+    parses = grammar.parse_input('two plus two')
+    # parses = grammar.parse_input('difference of two numbers is 18 sum of two numbers is 72')
+    if len(parses) == 0:
+        print 'no parses'
+    else:
+        for p in parses:
+            print "-"
+            semantics = compute_semantics(p)
+            print domain.execute(semantics)
     # train_test_for_domain(ArithmeticDomain(), seed=1, print_examples=False)
     # train_on_dev_experiment()
     # evaluate_for_domain(EagerArithmeticDomain())
