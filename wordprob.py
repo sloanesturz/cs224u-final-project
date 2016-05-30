@@ -13,6 +13,7 @@ from parsing import Grammar, Rule, print_grammar, compute_semantics
 from scoring import rule_features
 
 from nltk.tree import Tree
+from solver import SympySolver
 
 from num2words import num2words
 
@@ -39,6 +40,21 @@ def make_examples(filename):
             )
     return examples
 
+def convertSemanticsToEqn(semantics):
+    if (type(semantics) is int) or len(semantics) == 1:
+        # base case
+        if semantics == "=":
+            semantics = "=="
+        return str(semantics)
+    elif len(semantics) == 2:
+        if len(semantics[1]) > 1:
+            return convertSemanticsToEqn(semantics[1][0]) + str(semantics[0])  + convertSemanticsToEqn(semantics[1][1])
+        else:
+            return str(semantics[1]) + str(semantics[0])
+
+    else:
+        return convertSemanticsToEqn(semantics[1]) + convertSemanticsToEqn(semantics[0]) + convertSemanticsToEqn(semantics[2])
+
 class WordProbDomain(Domain):
 
     # TODO: Segment examples into train/dev/test
@@ -56,9 +72,26 @@ class WordProbDomain(Domain):
         return features
 
     def execute(self, semantics):
-        # TODO: here is where we solve the problem given the Constraints
-        # that we parse out
-        pass
+        solver = SympySolver()
+        final_eqns = []
+        if type(semantics[0]) is list:
+            # case: we have more than one equation
+            for semantic_rep in semantics[0]:
+                eqn_as_string = convertSemanticsToEqn(semantic_rep)
+                # add eqn to list of eqns
+                final_eqns.append(eqn_as_string)
+
+            print solver.our_evaluate(final_eqns, 2)
+
+        elif type(semantics[0]) is tuple:
+            # case: we only have one equation to solve
+            eqn_as_string = convertSemanticsToEqn(semantics[0])
+            final_eqns.append(eqn_as_string)
+
+            # solve the equation
+            print solver.our_evaluate(final_eqns, 1)
+
+        return semantics
 
     def rules(self):
         rules = []
@@ -197,9 +230,6 @@ class WordProbDomain(Domain):
     def grammar(self):
         return Grammar(rules=self.rules(), start_symbol='$E')
 
-    def execute(self, semantics):
-        return semantics
-
     def training_metric(self):
         return DenotationAccuracyMetric()
 
@@ -211,9 +241,11 @@ if __name__ == "__main__":
     print input
     parses = grammar.parse_input(preprocess(input))
 
-    print len(parses)
+    print "Number of parses: {0}".format(len(parses))
     for _, v in {str(s): s for s in [p.semantics for p in parses]}.iteritems():
         print v
+        print "Now trying to solve the parse"
+        domain.execute(v)
     if len(parses) == 0:
         print 'no parses'
     # print str2tree(str(parses[0])).pprint()
