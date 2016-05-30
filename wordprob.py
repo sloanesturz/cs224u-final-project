@@ -26,7 +26,6 @@ def preprocess(question):
     # TODO: we could do a lot of good stuff here
     split = re.findall(r"[\w\-']+|[.,!?;]", question.lower())
     text = " ".join(split)
-    print text
     return text
 
 def make_examples(filename):
@@ -74,6 +73,7 @@ class WordProbDomain(Domain):
 
     def execute(self, semantics):
         solver = SympySolver()
+        answers = []
         final_eqns = []
         if type(semantics[0]) is list:
             # case: we have more than one equation
@@ -82,7 +82,7 @@ class WordProbDomain(Domain):
                 # add eqn to list of eqns
                 final_eqns.append(eqn_as_string)
 
-            print solver.our_evaluate(final_eqns, 2)
+            answers = solver.our_evaluate(final_eqns, 2)
 
         elif type(semantics[0]) is tuple:
             # case: we only have one equation to solve
@@ -90,9 +90,10 @@ class WordProbDomain(Domain):
             final_eqns.append(eqn_as_string)
 
             # solve the equation
-            print solver.our_evaluate(final_eqns, 1)
+            answers = solver.our_evaluate(final_eqns, 1)
 
-        return semantics
+        # print answers
+        return answers
 
     def rules(self):
         rules = []
@@ -115,12 +116,14 @@ class WordProbDomain(Domain):
             Rule('$EBO', '$Expr $Compare', lambda sems: (sems[1], sems[0])),
             Rule('$EOL', '.'),
             Rule('$EOL', ','),
+            Rule('$EOL', '?'),
 
             # Constraints with leading Junk
             Rule('$JunkList', '$Junk ?$JunkList'),
             Rule('$Constraint', '$Find $JunkList $If $Constraint', lambda sems: sems[3]),
             Rule('$If', 'if'),
             Rule('$Find', 'find'),
+            Rule('$Find', 'what'),
 
             # Pre or postfix command sentence.
             Rule('$Command', '$Find $JunkList ?$EOL'),
@@ -242,7 +245,7 @@ if __name__ == "__main__":
     print input
     parses = grammar.parse_input(preprocess(input))
 
-    print "Number of parses: {0}".format(len(parses))
+    # print "Number of parses: {0}".format(len(parses))
     for _, v in {str(s): s for s in [p.semantics for p in parses]}.iteritems():
         print v
         print "Now trying to solve the parse"
