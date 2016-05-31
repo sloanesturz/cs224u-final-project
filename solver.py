@@ -38,15 +38,18 @@ class SympySolver():
 
 	def our_evaluate(self, final_eqns, num_variables):
 		sympy_exprs = convertToSympyExprs(final_eqns)
-		print sympy_exprs
 		symbols = createSymbols(num_variables)
 		
-		answer_dict = solve(sympy_exprs, symbols)  # unpack symbols into parameters
+		answers = solve(sympy_exprs, symbols)  # unpack symbols into parameters
 
 		# we need to get the output into a format that we can compare with
 		# the answers in the json file
 		answer_array = []
-		for variable, answer in answer_dict.iteritems():
-			answer_array.append(answer)
+		if type(answers) is dict:
+			for variable, answer in answers.iteritems():
+				answer_array.append(answer)
+		else:
+			# case: answers is a list with the right answers
+			answer_array = answers
 
 		return answer_array 

@@ -72,22 +72,22 @@ class WordProbDomain(Domain):
         return features
 
     def execute(self, semantics):
-        return semantics # TODO: replace
+        # return semantics # TODO: replace
         solver = SympySolver()
         answers = []
         final_eqns = []
-        if type(semantics[0]) is list:
+        if type(semantics) is list:
             # case: we have more than one equation
-            for semantic_rep in semantics[0]:
+            for semantic_rep in semantics:
                 eqn_as_string = convertSemanticsToEqn(semantic_rep)
                 # add eqn to list of eqns
                 final_eqns.append(eqn_as_string)
 
             answers = solver.our_evaluate(final_eqns, 2)
 
-        elif type(semantics[0]) is tuple:
+        elif type(semantics) is tuple:
             # case: we only have one equation to solve
-            eqn_as_string = convertSemanticsToEqn(semantics[0])
+            eqn_as_string = convertSemanticsToEqn(semantics)
             final_eqns.append(eqn_as_string)
 
             # solve the equation
