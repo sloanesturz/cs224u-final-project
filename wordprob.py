@@ -108,11 +108,12 @@ class WordProbDomain(Domain):
             rules.append(Rule('$Num', str(i), i))
             rules.append(Rule('$Num', str(-i), -i))
             rules.append(Rule('$Num', w, i))
+            rules.append(Rule('$Num', "negative %s" % w, -i))
 
         rules.extend([
             # constraint setup
-            Rule('$E', '$ConstraintList ?$Command', lambda sems: sems[0]),
-            Rule('$E', '?$Command $ConstraintList', lambda sems: sems[1]),
+            Rule('$E', '?$Command $ConstraintList ?$Command', lambda sems: sems[1]),
+            # Rule('$E', '?$Command $ConstraintList', lambda sems: sems[1]),
             Rule('$ConstraintList', '$Constraint ?$EOL', lambda sems: sems[0]),
             Rule('$ConstraintList', '$Constraint ?$EOL ?$Joiner $ConstraintList',
                 lambda sems: push_list(sems[0], sems[3])),
@@ -139,9 +140,45 @@ class WordProbDomain(Domain):
             # TODO: extract a semantic meaning like ('find smallest') or ('find all')
             Rule('$Command', '$Find $JunkList ?$EOL'),
             Rule('$Command', '$What $Is $JunkList ?$EOL'),
+            Rule('$Command', '$I $Have $JunkList ?$EOL'),
             Rule('$What', 'what'),
             Rule('$Is', 'is'),
             Rule('$Is', 'are'),
+            Rule('$Have', 'have'),
+            Rule('$I', 'i'),
+        ])
+
+        # Complex constraint: 'When x is added to y the result is z'
+        rules.extend([
+            Rule('$Constraint', '$Occasion $Expr $OccasionOpRtoL $Expr ?$EOL $ResultsIn $Expr',
+                lambda sems: ('=', (sems[2], sems[1], sems[3]), sems[6])),
+            Rule('$Occasion', 'when'),
+            Rule('$Occasion', 'if'),
+            Rule('$OccasionOpRtoL', 'is added to', '+'),
+            Rule('$OccasionOpRtoL', 'is multiplied by', '*'),
+            Rule('$OccasionOpRtoL', 'is divided by', '/'),
+
+            Rule('$Constraint', '$Occasion $Expr $OccasionOpLtoR $Expr ?$EOL $ResultsIn $Expr',
+                lambda sems: ('=', (sems[2], sems[3], sems[1]), sems[5])),
+            Rule('$OccasionOpLtoR', 'is subtracted from', '-'),
+
+            Rule('$ResultsIn', 'the result is'),
+        ])
+
+        # Non-standard constraint OperateAndEquality
+        rules.extend([
+            Rule('$Constraint', '?$Question $ExprList $OperatorAndEquality $Expr',
+                lambda sems: ('=', ('abs', (sems[2], sems[1])), sems[3])),
+            Rule('$OperatorAndEquality', 'total to', '+'),
+            Rule('$OperatorAndEquality', 'sum to', '+'),
+            Rule('$OperatorAndEquality', 'total', '+'),
+            Rule('$OperatorAndEquality', 'sum', '+'),
+            Rule('$OperatorAndEquality', 'have a sum of', '+'),
+            Rule('$OperatorAndEquality', 'have a total of', '+'),
+            Rule('$OperatorAndEquality', 'have a difference of', '-'),
+            Rule('$OperatorAndEquality', 'differ by', '-'),
+            Rule('$Question', 'which'),
+            Rule('$Question', 'what'),
         ])
 
         # PreOperator
@@ -161,15 +198,26 @@ class WordProbDomain(Domain):
 
         rules.append(Rule('$Expr', '$Multiplier $Expr',
             lambda sems: ('*', (sems[0], sems[1]))))
+
         rules.extend([
             Rule('$Multiplier', 'twice', 2),
             Rule('$Multiplier', 'triple', 3),
             Rule('$Multiplier', 'quadruple', 4),
-            Rule('$Multiplier', 'a quarter of', 1./4),
-            Rule('$Multiplier', 'a third of', 1./3),
             Rule('$Multiplier', 'half', 1./2),
+
+            Rule('$Fraction', 'fifth', 1./5),
+            Rule('$Fraction', 'fourth', 1./4),
+            Rule('$Fraction', 'third', 1./3),
+            Rule('$Fraction', 'half', 1./2),
+
+            # two times the first plus 'a fourth the second'
+            Rule('$Multiplier', '?$A $Fraction ?$Of', lambda sems: sems[1]),
+            # two times the first plus ' fourth of the second'
+            # two times the first plus '3/4 of the second'
             Rule('$Multiplier', '$Expr $Of', lambda sems: sems[0]),
-            Rule('$Of', 'of')
+            Rule('$Of', 'of'),
+            Rule('$A', 'one'),
+            Rule('$A', 'a'),
         ])
 
         def consecutive_integers(n, is_even):
@@ -203,10 +251,21 @@ class WordProbDomain(Domain):
 
             Rule('$SetDescriptor', 'same'),
 
+            # # Is this crazy?! Probably!
+            Rule('$ExprList', 'its digits',
+                (('%', ('/', 'x', 10), 10), ('%', 'x', 10))),
+            Rule('$ExprList', 'the digits of a two-digit number',
+                (('%', ('/', 'x', 10), 10), ('%', 'x', 10))),
+            Rule('$ExprList', 'the digits of a 2-digit number',
+                (('%', ('/', 'x', 10), 10), ('%', 'x', 10))),
+            Rule('$ExprList', 'the digits',
+                (('%', ('/', 'x', 10), 10), ('%', 'x', 10))),
+
             Rule('$ExprList', '$MappingOperator $ExprList',
                 lambda sems: tuple((sems[0], item) for item in sems[1])),
             Rule('$MappingOperator', 'the squares of', '^2'),
             Rule('$MappingOperator', 'the roots of', '^(.5)'),
+            Rule('$MappingOperator', 'the reciprocals of', '^(-1)'),
 
             Rule('$ExprList', '$Expr ?$Sign $Consecutive ?$Even $Integers',
                 lambda sems: consecutive_integers(sems[0], sems[3])),
@@ -225,11 +284,13 @@ class WordProbDomain(Domain):
             Rule('$MidOperator', 'minus', '+'),
             Rule('$MidOperator', 'times', '*'),
             Rule('$MidOperator', 'divided by', '/'),
+            Rule('$MidOperator', 'modulo', '%'),
             # Literal
             Rule('$MidOperator', '+', '+'),
             Rule('$MidOperator', '-', '+'),
             Rule('$MidOperator', '*', '*'),
             Rule('$MidOperator', '/', '/'),
+            Rule('$MidOperator', '%', '%'),
             # Complex structure
             Rule('$MidOperator', 'more than', '+'),
             Rule('$MidOperator', 'less than', '-'),
@@ -277,6 +338,10 @@ class WordProbDomain(Domain):
             Rule('$Expr', 'whose sum', ('+', ('x', 'y', 'z'))),
             Rule('$Expr', 'whose difference', ('-', ('x', 'y'))),
             Rule('$Expr', 'whose difference', ('-', ('x', 'y', 'z'))),
+            Rule('$Expr', 'the sum', ('+', ('x', 'y'))),
+            Rule('$Expr', 'the sum', ('+', ('x', 'y', 'z'))),
+            Rule('$Expr', 'the difference', ('-', ('x', 'y'))),
+            Rule('$Expr', 'the difference', ('-', ('x', 'y', 'z'))),
         ])
 
         rules.extend([
@@ -300,6 +365,8 @@ class WordProbDomain(Domain):
             Rule('$PrimaryArticle', 'the smallest'),
             Rule('$PrimaryArticle', 'the smaller'),
             Rule('$PrimaryArticle', 'the same'),
+            Rule('$PrimaryArticle', 'that'),
+            Rule('$PrimaryArticle', 'the first'),
 
             Rule('$Var', '$PrimaryArticle ?$NumberDescriptor ?$Number', 'x'),
 
