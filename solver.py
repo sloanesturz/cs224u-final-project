@@ -24,6 +24,7 @@ def convertToSympyExprs(final_eqns):
 			sympy_expr = sympify(formattedString(eqn))
 			exprs.append(sympy_expr)
 		except (SympifyError) as e:
+			print e
 			return "Error thrown"
 
 	if len(final_eqns) == 1:
@@ -62,9 +63,8 @@ class SympySolver():
 		sympy_exprs = convertToSympyExprs(final_eqns)
 		if sympy_exprs == "Error thrown":
 			return []
-		
-		symbols = createSymbols(num_variables, is_consecutive)
 
+		symbols = createSymbols(num_variables, is_consecutive)
 		answers = solve(sympy_exprs, symbols)  # unpack symbols into parameters
 		if is_consecutive:
 			# dealing with a "consecutive" type of problem with only one equation

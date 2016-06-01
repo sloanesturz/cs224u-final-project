@@ -1,3 +1,5 @@
+# -*- coding: utf-8 -*-
+
 import re
 import json
 import sys
@@ -24,8 +26,9 @@ def str2tree(s):
 
 def preprocess(question):
     # TODO: we could do a lot of good stuff here
-    split = re.findall(r"[\w\-']+|[.,!?;/]", question.lower())
+    split = re.findall(r"[\w\-']+|[.,!?;/=]", question.lower())
     text = " ".join(split)
+    text = text.replace('. .', '.') # TODO: make more general?
     return text
 
 def make_examples(filename):
@@ -59,6 +62,8 @@ def convertSemanticsToEqn(semantics):
                 # cases where semantics are in the form:
                 # ('^2', ('+', ('1*x+0', '1*x+1')))
                 return "(" + convertSemanticsToEqn(semantics[1]) + ")" + str(semantics[0])
+            elif semantics[0] == "abs":
+                return "Abs(%s)" % convertSemanticsToEqn(semantics[1])
             else:
                 return "(" + convertSemanticsToEqn(semantics[1][0]) + ")" + str(semantics[0])  +  "(" + convertSemanticsToEqn(semantics[1][1]) + ")"
         else:
@@ -123,6 +128,10 @@ class WordProbDomain(Domain):
             rules.append(Rule('$Num', str(-i), -i))
             rules.append(Rule('$Num', w, i))
             rules.append(Rule('$Num', "negative %s" % w, -i))
+            if '-' in w:
+                rules.append(Rule('$Num', w.replace('-', ' '), i))
+            if ' and ' in w:
+                rules.append(Rule('$Num', w.replace(' and ', ' '), i))
 
         rules.extend([
             # constraint setup
@@ -140,6 +149,7 @@ class WordProbDomain(Domain):
             Rule('$EOL', '.'),
             Rule('$EOL', ','),
             Rule('$EOL', '?'),
+            Rule('$Comma', ','),
 
             # Constraints with leading or trailing Junk
             Rule('$JunkList', '$Junk ?$JunkList'),
@@ -153,11 +163,11 @@ class WordProbDomain(Domain):
             # Pre or postfix command sentence.
             # TODO: extract a semantic meaning like ('find smallest') or ('find all')
             Rule('$Command', '$Find $JunkList ?$EOL'),
-            Rule('$Command', '$What $Is $JunkList ?$EOL'),
+            Rule('$Command', '$What $WordIs $JunkList ?$EOL'),
             Rule('$Command', '$I $Have $JunkList ?$EOL'),
             Rule('$What', 'what'),
-            Rule('$Is', 'is'),
-            Rule('$Is', 'are'),
+            Rule('$WordIs', 'is'),
+            Rule('$WordIs', 'are'),
             Rule('$Have', 'have'),
             Rule('$I', 'i'),
         ])
@@ -182,7 +192,7 @@ class WordProbDomain(Domain):
         # Non-standard constraint OperateAndEquality
         rules.extend([
             Rule('$Constraint', '?$Question $ExprList $OperatorAndEquality $Expr',
-                lambda sems: ('=', ('abs', (sems[2], sems[1])), sems[3])),
+                lambda sems: ('=', (sems[2], sems[1]), sems[3])),
             Rule('$OperatorAndEquality', 'total to', '+'),
             Rule('$OperatorAndEquality', 'sum to', '+'),
             Rule('$OperatorAndEquality', 'total', '+'),
@@ -190,6 +200,9 @@ class WordProbDomain(Domain):
             Rule('$OperatorAndEquality', 'have a sum of', '+'),
             Rule('$OperatorAndEquality', 'have a total of', '+'),
             Rule('$OperatorAndEquality', 'have a difference of', '-'),
+            Rule('$OperatorAndEquality', 'have the sum of', '+'),
+            Rule('$OperatorAndEquality', 'have the total of', '+'),
+            Rule('$OperatorAndEquality', 'have the difference of', '-'),
             Rule('$OperatorAndEquality', 'differ by', '-'),
             Rule('$Question', 'which'),
             Rule('$Question', 'what'),
@@ -207,7 +220,7 @@ class WordProbDomain(Domain):
                 Rule('$PreOperator', prefix + 'quotient of', '/'),
                 Rule('$PreUnaryOperator', prefix + 'square root of', '^(1/2)'),
                 Rule('$PreUnaryOperator', prefix + 'square of', '^2'),
-                Rule('$PreUnaryOperator', prefix + 'cube of', '^2'),
+                Rule('$PreUnaryOperator', prefix + 'cube of', '^3'),
             ])
 
         rules.append(Rule('$Expr', '$Multiplier $Expr',
@@ -219,20 +232,28 @@ class WordProbDomain(Domain):
             Rule('$Multiplier', 'quadruple', 4),
             Rule('$Multiplier', 'half', 1./2),
 
-            Rule('$Fraction', 'fifth', 1./5),
-            Rule('$Fraction', 'fourth', 1./4),
-            Rule('$Fraction', 'third', 1./3),
-            Rule('$Fraction', 'half', 1./2),
-
             # two times the first plus 'a fourth the second'
             Rule('$Multiplier', '?$A $Fraction ?$Of', lambda sems: sems[1]),
             # two times the first plus ' fourth of the second'
-            # two times the first plus '3/4 of the second'
             Rule('$Multiplier', '$Expr $Of', lambda sems: sems[0]),
+            # two times the first plus '3/4 of the second'
+            Rule('$Multiplier', '$Num $Div $Num',
+                lambda sems: 1. * sems[0] / sems[2]),
             Rule('$Of', 'of'),
             Rule('$A', 'one'),
             Rule('$A', 'a'),
+            Rule('$Div', '/')
         ])
+
+        for prefix in ['', 'one-']:
+            rules.extend([
+                Rule('$Fraction', prefix + 'fifth', 1./5),
+                Rule('$Fraction', prefix + 'fourth', 1./4),
+                Rule('$Fraction', prefix + 'third', 1./3),
+                Rule('$Fraction', prefix + 'third', 1./3),
+                Rule('$Fraction', prefix + 'half', 1./2),
+            ])
+
 
         def consecutive_integers(n, is_even):
             # n -> number of Integers
@@ -252,10 +273,10 @@ class WordProbDomain(Domain):
             # ExprList
             Rule('$ExprList', '$Expr $And $Expr', lambda sems: (sems[0], sems[2])),
             Rule('$And', 'and'),
-            Rule('$ExprList', '$The ?$SetDescriptor $Integers', ('x', 'y')),
-            Rule('$ExprList', '?$The ?$SetDescriptor $Two $Integers', ('x', 'y')),
-            Rule('$ExprList', '$The ?$SetDescriptor $Integers', ('x', 'y', 'z')),
-            Rule('$ExprList', '?$The ?$SetDescriptor $Three $Integers', ('x', 'y', 'z')),
+            Rule('$ExprList', '$The ?$SetDescriptor ?$Integers', ('x', 'y')),
+            Rule('$ExprList', '?$The ?$SetDescriptor $Two ?$Integers', ('x', 'y')),
+            Rule('$ExprList', '$The ?$SetDescriptor ?$Integers', ('x', 'y', 'z')),
+            Rule('$ExprList', '?$The ?$SetDescriptor $Three ?$Integers', ('x', 'y', 'z')),
 
             Rule('$The', 'the'),
             Rule('$Two', '2'),
@@ -264,6 +285,14 @@ class WordProbDomain(Domain):
             Rule('$Three', 'three'),
 
             Rule('$SetDescriptor', 'same'),
+            Rule('$SetDescriptor', 'all'),
+
+            Rule('$ExprList', '?$The $EndDescriptor $Two $Integers',
+                lambda sems: ('x', 'y', 'z')[sems[1][0]:sems[1][1]]),
+            Rule('$EndDescriptor', 'larger', (1, 3)),
+            Rule('$EndDescriptor', 'largest', (1, 3)),
+            Rule('$EndDescriptor', 'smaller', (0, 2)),
+            Rule('$EndDescriptor', 'smallest', (0, 2)),
 
             # # Is this crazy?! Probably!
             Rule('$ExprList', 'its digits',
@@ -292,13 +321,28 @@ class WordProbDomain(Domain):
             Rule('$Sign', 'negative'),
 
             # MidOperator
-            Rule('$Expr', '$Expr $MidOperator $Expr', lambda sems: (sems[1], sems[0], sems[2])),
+            Rule('$Expr', '$Expr ?$Comma $MidOperator $Expr ?$Comma',
+                lambda sems: (sems[2], sems[0], sems[3])),
+        ])
+
+        rules.extend([
             # Word
             Rule('$MidOperator', 'plus', '+'),
             Rule('$MidOperator', 'minus', '+'),
             Rule('$MidOperator', 'times', '*'),
-            Rule('$MidOperator', 'divided by', '/'),
+            Rule('$MidOperator', 'time', '*'),
             Rule('$MidOperator', 'modulo', '%'),
+        ])
+
+        for prefix in ['', 'when ']:
+            rules.extend([
+                Rule('$MidOperator', prefix + 'added to', '+'),
+                Rule('$MidOperator', prefix + 'multiplied by', '+'),
+                Rule('$MidOperator', prefix + 'divided by', '/'),
+                Rule('$MidOperator', prefix + 'decreased by', '-'),
+            ])
+
+        rules.extend([
             # Literal
             Rule('$MidOperator', '+', '+'),
             Rule('$MidOperator', '-', '+'),
@@ -314,6 +358,7 @@ class WordProbDomain(Domain):
             # Comparisons
             Rule('$Compare', 'is', '='),
             Rule('$Compare', 'equals', '='),
+            Rule('$Compare', '=', '='),
             Rule('$Compare', 'is equal to', '='),
             Rule('$Compare', 'is less than', '<'),
             Rule('$Compare', 'is less than or equal to', '<='),
@@ -378,6 +423,7 @@ class WordProbDomain(Domain):
             Rule('$PrimaryArticle', 'the'),
             Rule('$PrimaryArticle', 'the smallest'),
             Rule('$PrimaryArticle', 'the smaller'),
+            Rule('$PrimaryArticle', 'the least'),
             Rule('$PrimaryArticle', 'the same'),
             Rule('$PrimaryArticle', 'that'),
             Rule('$PrimaryArticle', 'the first'),
@@ -387,6 +433,8 @@ class WordProbDomain(Domain):
             Rule('$NumberDescriptor', 'positive'),
             Rule('$NumberDescriptor', 'constant'),
             Rule('$NumberDescriptor', 'negative'),
+            Rule('$NumberDescriptor', 'whole'),
+            Rule('$NumberDescriptor', 'natural'),
 
             Rule('$Var', '$SecondaryArticle ?$NumberDescriptor ?$Number', 'y'),
             Rule('$SecondaryArticle', 'another'),
@@ -399,9 +447,14 @@ class WordProbDomain(Domain):
 
             Rule('$Var', '$TertiaryArticle ?$NumberDescriptor ?$Number', 'z'),
             Rule('$TertiaryArticle', 'the largest'),
+            Rule('$TertiaryArticle', 'the greatest'),
             Rule('$TertiaryArticle', 'the third'),
             Rule('$TertiaryArticle', 'a largest'),
             Rule('$TertiaryArticle', 'a third'),
+
+            Rule('$Expr', '$Selector $ExprList', lambda sems: sems[1][sems[0]]),
+            Rule('$Selector', 'the smallest of', 0),
+            Rule('$Selector', 'the largest of', -1),
         ])
 
         # Add in a class called '$Junk' for words that don't matter
@@ -437,13 +490,12 @@ def check_parses():
                         empty_answer = False
                 if empty_answer == False:
                     succ_solve += 1
+                    print u"✓", example['text']
                 else:
-                    print example['text']
-                    print "No answer, but we got parses"
+                    print u"½", example['text']
                 succ_parse += 1
             else:
-                print example['text']
-                print 'no parse at all'
+                print u'✗', example['text']
 
         print "success parses", 100. * succ_parse / (len(examples))
         print "success solve", 100. * succ_solve / (len(examples))
@@ -461,7 +513,7 @@ if __name__ == "__main__":
 
         print "Number of parses: {0}".format(len(parses))
         for _, v in {str(s): s for s in [p.semantics for p in parses]}.iteritems():
-            # print v
+            print v
             print "answer: " + str(domain.execute(v))
         if len(parses) == 0:
             print 'no parses'
