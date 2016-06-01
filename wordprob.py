@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 import re
 import json
 import sys
@@ -43,14 +41,23 @@ def make_examples(filename):
     return examples
 
 def convertSemanticsToEqn(semantics):
-    if (type(semantics) is int) or len(semantics) == 1:
+    if (type(semantics) is int) or (type(semantics) is str) or (type(semantics) is float) or len(semantics) == 1:
         # base case
-        if semantics == "=":
-            semantics = "=="
         return str(semantics)
     elif len(semantics) == 2:
-        if len(semantics[1]) > 1:
-            return convertSemanticsToEqn(semantics[1][0]) + str(semantics[0])  + convertSemanticsToEqn(semantics[1][1])
+        
+        if len(semantics[1]) == 3:
+            # "consecutive" type questions where semantics are in the form:
+            # ('+', ('2*x+1', '2*x+3', '2*x+5'))
+            return "(" + str(semantics[1][0]) + ")" + str(semantics[0]) + "(" + str(semantics[1][1]) + ")" + str(semantics[0]) + "(" + str(semantics[1][2]) + ")"
+
+        elif len(semantics[1]) > 1:
+            if "^" in semantics[0]:
+                # cases where semantics are in the form:
+                # ('^2', ('+', ('1*x+0', '1*x+1')))
+                return "(" + convertSemanticsToEqn(semantics[1]) + ")" + str(semantics[0])
+            else:
+                return "(" + convertSemanticsToEqn(semantics[1][0]) + ")" + str(semantics[0])  +  "(" + convertSemanticsToEqn(semantics[1][1]) + ")"
         else:
             return str(semantics[1]) + str(semantics[0])
 
@@ -74,26 +81,32 @@ class WordProbDomain(Domain):
         return features
 
     def execute(self, semantics):
+        is_consecutive = False
+        if "k" in str(semantics):
+            is_consecutive = True
+
         # return semantics # TODO: replace
         solver = SympySolver()
         answers = []
         final_eqns = []
         if type(semantics) is list:
             # case: we have more than one equation
+            # print "We are in the case with 1+ equations"
             for semantic_rep in semantics:
                 eqn_as_string = convertSemanticsToEqn(semantic_rep)
                 # add eqn to list of eqns
                 final_eqns.append(eqn_as_string)
 
-            answers = solver.our_evaluate(final_eqns, 2)
+            answers = solver.our_evaluate(final_eqns, 2, is_consecutive)
 
         elif type(semantics) is tuple:
             # case: we only have one equation to solve
+            # print "We are in the case with 1 equation"
             eqn_as_string = convertSemanticsToEqn(semantics)
             final_eqns.append(eqn_as_string)
 
             # solve the equation
-            answers = solver.our_evaluate(final_eqns, 1)
+            answers = solver.our_evaluate(final_eqns, 1, is_consecutive)
 
         # print answers
         return answers
@@ -230,7 +243,7 @@ class WordProbDomain(Domain):
                     count = NUMBERS.index(n)
                 except:
                     count = 2 # TODO: not this number
-            start = 1 if is_even == False else 0
+            start = -1 if is_even == False else 0
             mult = 2 if is_even in (True, False) else 1
             return tuple('%s*k+%s' % (mult, mult * i + start) for i in range(count))
 
@@ -408,14 +421,25 @@ def check_parses():
     with open('curated-data/non-yahoo-questions-dev.json') as f:
         examples = json.load(f)
         succ_parse = 0
+        succ_solve = 0 
         for example in examples:
-            print example['text']
-            if len(grammar.parse_input(preprocess(example['text']))) > 0:
-                print u"✓"
+            parses = grammar.parse_input(preprocess(example['text']))
+            if len(parses) > 0:
+                empty_answer = True
+                for _, v in {str(s): s for s in [p.semantics for p in parses]}.iteritems():
+                    answer = domain.execute(v)
+                    if len(answer) != 0:
+                        empty_answer = False
+
+                if empty_answer == False:
+                    succ_solve += 1
+                else:
+                    print example['text']
+                    print "No answer, but we got parses"
                 succ_parse += 1
-            else:
-                print u"✗"
-        print "success", 100. * succ_parse / (len(examples))
+
+        print "success parses", 100. * succ_parse / (len(examples))
+        print "success solve", 100. * succ_solve / (len(examples))
 
 if __name__ == "__main__":
     domain = WordProbDomain()
@@ -430,12 +454,10 @@ if __name__ == "__main__":
 
         print "Number of parses: {0}".format(len(parses))
         for _, v in {str(s): s for s in [p.semantics for p in parses]}.iteritems():
-            print v
-            print "Now trying to solve the parse"
-            domain.execute(v)
+            # print v
+            print "answer: " + str(domain.execute(v))
         if len(parses) == 0:
             print 'no parses'
-        # print str2tree(str(parses[0])).pprint()
     else:
         # Running this is sad and will make you unhappy :(
         evaluate_dev_examples_for_domain(WordProbDomain())
