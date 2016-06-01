@@ -26,7 +26,7 @@ def str2tree(s):
 
 def preprocess(question):
     # TODO: we could do a lot of good stuff here
-    split = re.findall(r"[\w\-']+|[.,!?;/=]", question.lower())
+    split = re.findall(r"[A-Za-z\-']+|[.,!?;/=+*]|-?\d+", question.lower())
     text = " ".join(split)
     text = text.replace('. .', '.') # TODO: make more general?
     return text
@@ -125,7 +125,7 @@ class WordProbDomain(Domain):
 
         for i, w in enumerate(NUMBERS):
             rules.append(Rule('$Num', str(i), i))
-            rules.append(Rule('$Num', str(-i), -i))
+            rules.append(Rule('$Num', "- %s" % i, -i))
             rules.append(Rule('$Num', w, i))
             rules.append(Rule('$Num', "negative %s" % w, -i))
             if '-' in w:
@@ -134,9 +134,11 @@ class WordProbDomain(Domain):
                 rules.append(Rule('$Num', w.replace(' and ', ' '), i))
 
         rules.extend([
-            # constraint setup
+            # Odd type of problem: 'four plus four' -> x = 4 + 4
+            Rule('$E', '$Expr', lambda sems: ('=', sems[0], 'x')),
+
+            # Usual types of problem strucutre
             Rule('$E', '?$Command $ConstraintList ?$Command', lambda sems: sems[1]),
-            # Rule('$E', '?$Command $ConstraintList', lambda sems: sems[1]),
             Rule('$ConstraintList', '$Constraint ?$EOL', lambda sems: sems[0]),
             Rule('$ConstraintList', '$Constraint ?$EOL ?$Joiner $ConstraintList',
                 lambda sems: push_list(sems[0], sems[3])),
@@ -165,11 +167,13 @@ class WordProbDomain(Domain):
             Rule('$Command', '$Find $JunkList ?$EOL'),
             Rule('$Command', '$What $WordIs $JunkList ?$EOL'),
             Rule('$Command', '$I $Have $JunkList ?$EOL'),
+            Rule('$Command', '$Given $JunkList ?$EOL'),
             Rule('$What', 'what'),
             Rule('$WordIs', 'is'),
             Rule('$WordIs', 'are'),
             Rule('$Have', 'have'),
             Rule('$I', 'i'),
+            Rule('$Given', 'given'),
         ])
 
         # Complex constraint: 'When x is added to y the result is z'
@@ -345,7 +349,7 @@ class WordProbDomain(Domain):
         rules.extend([
             # Literal
             Rule('$MidOperator', '+', '+'),
-            Rule('$MidOperator', '-', '+'),
+            Rule('$MidOperator', '-', '-'),
             Rule('$MidOperator', '*', '*'),
             Rule('$MidOperator', '/', '/'),
             Rule('$MidOperator', '%', '%'),
