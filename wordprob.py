@@ -1,3 +1,5 @@
+# -*- coding: utf-8 -*-
+
 import re
 import json
 import sys
@@ -175,8 +177,11 @@ class WordProbDomain(Domain):
             # is_even -> (True, False, None) == (even, odd, consec)
             try:
                 count = int(n)
-            except ValueError:
-                count = NUMBERS.index(n)
+            except (ValueError, TypeError) as e:
+                try:
+                    count = NUMBERS.index(n)
+                except:
+                    count = 2 # TODO: not this number
             start = 1 if is_even == False else 0
             mult = 2 if is_even in (True, False) else 1
             return tuple('%s*k+%s' % (mult, mult * i + start) for i in range(count))
@@ -203,13 +208,15 @@ class WordProbDomain(Domain):
             Rule('$MappingOperator', 'the squares of', '^2'),
             Rule('$MappingOperator', 'the roots of', '^(.5)'),
 
-            Rule('$ExprList', '$Expr $Consecutive ?$Even $Integers',
-                lambda sems: consecutive_integers(sems[0], sems[2])),
+            Rule('$ExprList', '$Expr ?$Sign $Consecutive ?$Even $Integers',
+                lambda sems: consecutive_integers(sems[0], sems[3])),
             Rule('$Consecutive', 'consecutive'),
             Rule('$Even', 'even', True),
             Rule('$Even', 'odd', False),
             Rule('$Integers', 'integers'),
             Rule('$Integers', 'numbers'),
+            Rule('$Sign', 'positive'),
+            Rule('$Sign', 'negative'),
 
             # MidOperator
             Rule('$Expr', '$Expr $MidOperator $Expr', lambda sems: (sems[1], sems[0], sems[2])),
@@ -330,12 +337,27 @@ class WordProbDomain(Domain):
     def training_metric(self):
         return DenotationAccuracyMetric()
 
+def check_parses():
+    with open('curated-data/non-yahoo-questions-dev.json') as f:
+        examples = json.load(f)
+        succ_parse = 0
+        for example in examples:
+            print example['text']
+            if len(grammar.parse_input(preprocess(example['text']))) > 0:
+                print u"✓"
+                succ_parse += 1
+            else:
+                print u"✗"
+        print "success", 100. * succ_parse / (len(examples))
+
 if __name__ == "__main__":
     domain = WordProbDomain()
     grammar = domain.grammar()
 
     input = " ".join(sys.argv[1:])
-    if input:
+    if '--check-parses' in sys.argv:
+        check_parses()
+    elif input:
         print input
         parses = grammar.parse_input(preprocess(input))
 

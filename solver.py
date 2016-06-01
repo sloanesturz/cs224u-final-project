@@ -39,7 +39,7 @@ class SympySolver():
 	def our_evaluate(self, final_eqns, num_variables):
 		sympy_exprs = convertToSympyExprs(final_eqns)
 		symbols = createSymbols(num_variables)
-		
+
 		answers = solve(sympy_exprs, symbols)  # unpack symbols into parameters
 
 		# we need to get the output into a format that we can compare with
@@ -52,4 +52,4 @@ class SympySolver():
 			# case: answers is a list with the right answers
 			answer_array = answers
 
-		return answer_array 
+		return answer_array
