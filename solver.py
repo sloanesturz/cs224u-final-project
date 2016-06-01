@@ -82,3 +82,20 @@ class SympySolver():
 			answer_array = answers
 
 		return answer_array
+
+
+	def count_variables(self, eqns):
+		observed_vars = set()
+		for eqn in eqns:
+			observed_vars.update(self.count_variables_helper(eqn))
+		return len(observed_vars)
+
+	def count_variables_helper(self, fragment):
+		observed_vars = set()
+		for t in fragment:
+			if type(t) == tuple:
+				observed_vars.update(self.count_variables_helper(t))
+			if type(t) == str:
+				if t in ['x', 'y', 'z', 'k']:
+					observed_vars.add(t)
+		return observed_vars

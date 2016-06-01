@@ -41,11 +41,14 @@ def make_examples(filename):
     return examples
 
 def convertSemanticsToEqn(semantics):
-    if (type(semantics) is int) or (type(semantics) is str) or (type(semantics) is float) or len(semantics) == 1:
+    if (type(semantics) is int) or \
+            (type(semantics) is str) or \
+            (type(semantics) is float) or \
+            len(semantics) == 1:
         # base case
         return str(semantics)
     elif len(semantics) == 2:
-        
+
         if len(semantics[1]) == 3:
             # "consecutive" type questions where semantics are in the form:
             # ('+', ('2*x+1', '2*x+3', '2*x+5'))
@@ -80,6 +83,14 @@ class WordProbDomain(Domain):
         features = rule_features(parse)
         return features
 
+    def flatten_list(self, l):
+        total = []
+        if type(l) is list:
+            for x in l:
+                total = total + self.flatten_list(x)
+            return total
+        return [l]
+
     def execute(self, semantics):
         is_consecutive = False
         if "k" in str(semantics):
@@ -89,24 +100,14 @@ class WordProbDomain(Domain):
         solver = SympySolver()
         answers = []
         final_eqns = []
-        if type(semantics) is list:
-            # case: we have more than one equation
-            # print "We are in the case with 1+ equations"
-            for semantic_rep in semantics:
-                eqn_as_string = convertSemanticsToEqn(semantic_rep)
-                # add eqn to list of eqns
-                final_eqns.append(eqn_as_string)
-
-            answers = solver.our_evaluate(final_eqns, 2, is_consecutive)
-
-        elif type(semantics) is tuple:
-            # case: we only have one equation to solve
-            # print "We are in the case with 1 equation"
-            eqn_as_string = convertSemanticsToEqn(semantics)
+        semantics = self.flatten_list([semantics])
+        for semantic_rep in semantics:
+            eqn_as_string = convertSemanticsToEqn(semantic_rep)
+            # add eqn to list of eqns
             final_eqns.append(eqn_as_string)
 
-            # solve the equation
-            answers = solver.our_evaluate(final_eqns, 1, is_consecutive)
+        num_vars = solver.count_variables(final_eqns)
+        answers = solver.our_evaluate(final_eqns, num_vars, is_consecutive)
 
         # print answers
         return answers
@@ -172,7 +173,7 @@ class WordProbDomain(Domain):
             Rule('$OccasionOpRtoL', 'is divided by', '/'),
 
             Rule('$Constraint', '$Occasion $Expr $OccasionOpLtoR $Expr ?$EOL $ResultsIn $Expr',
-                lambda sems: ('=', (sems[2], sems[3], sems[1]), sems[5])),
+                lambda sems: ('=', (sems[2], sems[3], sems[1]), sems[6])),
             Rule('$OccasionOpLtoR', 'is subtracted from', '-'),
 
             Rule('$ResultsIn', 'the result is'),
@@ -421,22 +422,28 @@ def check_parses():
     with open('curated-data/non-yahoo-questions-dev.json') as f:
         examples = json.load(f)
         succ_parse = 0
-        succ_solve = 0 
+        succ_solve = 0
         for example in examples:
             parses = grammar.parse_input(preprocess(example['text']))
             if len(parses) > 0:
                 empty_answer = True
                 for _, v in {str(s): s for s in [p.semantics for p in parses]}.iteritems():
-                    answer = domain.execute(v)
+                    try:
+                        answer = domain.execute(v)
+                    except Exception as e:
+                        print example['text']
+                        raise e
                     if len(answer) != 0:
                         empty_answer = False
-
                 if empty_answer == False:
                     succ_solve += 1
                 else:
                     print example['text']
                     print "No answer, but we got parses"
                 succ_parse += 1
+            else:
+                print example['text']
+                print 'no parse at all'
 
         print "success parses", 100. * succ_parse / (len(examples))
         print "success solve", 100. * succ_solve / (len(examples))
