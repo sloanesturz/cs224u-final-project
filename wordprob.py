@@ -55,7 +55,11 @@ def convertSemanticsToEqn(semantics):
         if len(semantics[1]) == 3:
             # "consecutive" type questions where semantics are in the form:
             # ('+', ('2*x+1', '2*x+3', '2*x+5'))
-            return "(" + str(semantics[1][0]) + ")" + str(semantics[0]) + "(" + str(semantics[1][1]) + ")" + str(semantics[0]) + "(" + str(semantics[1][2]) + ")"
+            return "(" + convertSemanticsToEqn(semantics[1][0]) + ")" + \
+                convertSemanticsToEqn(semantics[0]) +  \
+                "(" + convertSemanticsToEqn(semantics[1][1]) + ")" + \
+                convertSemanticsToEqn(semantics[0]) + \
+                "(" + convertSemanticsToEqn(semantics[1][2]) + ")" \
 
         elif len(semantics[1]) > 1:
             if "^" in semantics[0]:
@@ -155,6 +159,7 @@ class WordProbDomain(Domain):
 
             # Constraints with leading or trailing Junk
             Rule('$JunkList', '$Junk ?$JunkList'),
+            Rule('$Constraint', '$Find $Constraint', lambda sems: sems[1]),
             Rule('$Constraint', '$Find $JunkList $If $Constraint', lambda sems: sems[3]),
             Rule('$Constraint', '$If $Constraint ?$EOL $Find $JunkList', lambda sems: sems[1]),
             Rule('$If', 'if'),
@@ -201,6 +206,7 @@ class WordProbDomain(Domain):
             Rule('$OperatorAndEquality', 'sum to', '+'),
             Rule('$OperatorAndEquality', 'total', '+'),
             Rule('$OperatorAndEquality', 'sum', '+'),
+            Rule('$OperatorAndEquality', 'add up to', '+'),
             Rule('$OperatorAndEquality', 'have a sum of', '+'),
             Rule('$OperatorAndEquality', 'have a total of', '+'),
             Rule('$OperatorAndEquality', 'have a difference of', '-'),
@@ -259,7 +265,7 @@ class WordProbDomain(Domain):
             ])
 
 
-        def consecutive_integers(n, is_even):
+        def consecutive_integers(n, is_even, mult=None):
             # n -> number of Integers
             # is_even -> (True, False, None) == (even, odd, consec)
             try:
@@ -270,7 +276,8 @@ class WordProbDomain(Domain):
                 except:
                     count = 2 # TODO: not this number
             start = -1 if is_even == False else 0
-            mult = 2 if is_even in (True, False) else 1
+            if mult is None:
+                mult = 2 if is_even in (True, False) else 1
             return tuple('%s*k+%s' % (mult, mult * i + start) for i in range(count))
 
         rules.extend([
@@ -308,14 +315,18 @@ class WordProbDomain(Domain):
             Rule('$ExprList', 'the digits',
                 (('%', ('/', 'x', 10), 10), ('%', 'x', 10))),
 
-            Rule('$ExprList', '$MappingOperator $ExprList',
-                lambda sems: tuple((sems[0], item) for item in sems[1])),
-            Rule('$MappingOperator', 'the squares of', '^2'),
-            Rule('$MappingOperator', 'the roots of', '^(.5)'),
-            Rule('$MappingOperator', 'the reciprocals of', '^(-1)'),
+            Rule('$ExprList', '$ExprList $PostMappingOperator',
+                lambda sems: tuple((sems[1], item) for item in sems[0])),
+            Rule('$PostMappingOperator', 'whose squares', '^2'),
 
-            Rule('$ExprList', '$Expr ?$Sign $Consecutive ?$Even $Integers',
-                lambda sems: consecutive_integers(sems[0], sems[3])),
+            Rule('$ExprList', '$PreMappingOperator $ExprList',
+                lambda sems: tuple((sems[0], item) for item in sems[1])),
+            Rule('$PreMappingOperator', 'the squares of', '^2'),
+            Rule('$PreMappingOperator', 'the roots of', '^(.5)'),
+            Rule('$PreMappingOperator', 'the reciprocals of', '^(-1)'),
+
+            Rule('$ExprList', '$Expr ?$Sign $Consecutive ?$Sign ?$Even ?$Sign $Integers ?$Parenthetical',
+                lambda sems: consecutive_integers(sems[0], sems[4])),
             Rule('$Consecutive', 'consecutive'),
             Rule('$Even', 'even', True),
             Rule('$Even', 'odd', False),
@@ -323,6 +334,12 @@ class WordProbDomain(Domain):
             Rule('$Integers', 'numbers'),
             Rule('$Sign', 'positive'),
             Rule('$Sign', 'negative'),
+
+            Rule('$ExprList', '$Num $Consecutive $Multiples $Of $Num',
+                lambda sems: consecutive_integers(sems[0], None, sems[4])),
+            Rule('$Multiples', 'multiples'),
+
+            Rule('$Parenthetical', '$Expr $Comma $Expr ?$Comma $And $Expr'),
 
             # MidOperator
             Rule('$Expr', '$Expr ?$Comma $MidOperator $Expr ?$Comma',
@@ -393,18 +410,25 @@ class WordProbDomain(Domain):
             Rule('$Expr', 'its root', ('^1/2', 'x')),
 
             # These examples make me uncomfortable a little.
-            Rule('$Expr', 'their sum', ('+', ('x', 'y'))),
-            Rule('$Expr', 'their sum', ('+', ('x', 'y', 'z'))),
-            Rule('$Expr', 'their difference', ('-', ('x', 'y'))),
-            Rule('$Expr', 'their difference', ('-', ('x', 'y', 'z'))),
-            Rule('$Expr', 'whose sum', ('+', ('x', 'y'))),
-            Rule('$Expr', 'whose sum', ('+', ('x', 'y', 'z'))),
-            Rule('$Expr', 'whose difference', ('-', ('x', 'y'))),
-            Rule('$Expr', 'whose difference', ('-', ('x', 'y', 'z'))),
-            Rule('$Expr', 'the sum', ('+', ('x', 'y'))),
-            Rule('$Expr', 'the sum', ('+', ('x', 'y', 'z'))),
-            Rule('$Expr', 'the difference', ('-', ('x', 'y'))),
-            Rule('$Expr', 'the difference', ('-', ('x', 'y', 'z'))),
+            # Find two consecutive ints which add to 4 and 'whose product is X'
+            # Can we fix coref?
+            Rule('$Expr', '$Group $GroupOp', lambda sems: (sems[1], sems[0])),
+            Rule('$Group', 'their', ('x', 'y')),
+            Rule('$Group', 'their', ('x', 'y', 'z')),
+            Rule('$Group', 'whose', ('x', 'y')),
+            Rule('$Group', 'whose', ('x', 'y', 'z')),
+            Rule('$Group', 'the', ('x', 'y')),
+            Rule('$Group', 'the', ('x', 'y', 'z')),
+
+            Rule('$GroupOp', 'sum', '+'),
+            Rule('$GroupOp', 'sums', '+'),
+            Rule('$GroupOp', 'difference', '-'),
+            Rule('$GroupOp', 'differences', '-'),
+            Rule('$GroupOp', 'product', '*'),
+            Rule('$GroupOp', 'products', '*'),
+
+            # This one feels safe: 'two consecutive ints whose sum is 7'
+            Rule('$Expr', '$ExprList $Group $GroupOp', lambda sems: (sems[2], sems[0])),
         ])
 
         rules.extend([
