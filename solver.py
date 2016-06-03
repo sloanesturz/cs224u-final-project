@@ -32,15 +32,18 @@ def convertToSympyExprs(final_eqns):
 	else:
 		return exprs  # set of equations to solve
 
-def dealWithConsecutives(answer_for_k, final_eqn_as_string):
+def dealWithConsecutives(answers_for_k, final_eqn_as_string):
 	term_answers = []
 	# case: final_eqn is in the form (2*x+1) + (2*x+3) + (2*x+5')
 	# extract out the final terms we need to solve for (i.e. (2*x+1))
 	terms = re.findall('\([\d|*|\-|+|\/|\w]*\)', str(final_eqn_as_string), flags=re.I)
-	for term in terms:
-		sympy_expr = sympify(term)  # turn term into a sympy expression
-		term_answer = sympy_expr.subs(Symbol('k'), answer_for_k)  # subsitute answer for x into term
-		term_answers.append(term_answer)
+	for answer_for_k in answers_for_k:
+		# if we have more than one answer for k, we want to solve
+		# for the terms for each answer of k
+		for term in terms:
+			sympy_expr = sympify(term)  # turn term into a sympy expression
+			term_answer = sympy_expr.subs(Symbol('k'), answer_for_k)  # subsitute answer for x into term
+			term_answers.append(term_answer)
 
 	return term_answers
 
@@ -69,14 +72,18 @@ class SympySolver():
 		if is_consecutive:
 			# dealing with a "consecutive" type of problem with only one equation
 			# we need to return answers for all terms! Not the answer for x
-			answers = dealWithConsecutives(answers[0], final_eqns)
+			answers = dealWithConsecutives(answers, final_eqns)
 
 		# we need to get the output into a format that we can compare with
 		# the answers in the json file
 		answer_array = []
+		if len(answers) == 0: return [] 
+
 		if type(answers) is dict:
 			for variable, answer in answers.iteritems():
 				answer_array.append(answer)
+		elif type(answers[0]) is dict:
+			answer_array = []
 		else:
 			# case: answers is a list with the right answers
 			answer_array = answers

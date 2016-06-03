@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 import re
 import json
 import sys
@@ -499,18 +497,45 @@ class WordProbDomain(Domain):
     def training_metric(self):
         return DenotationAccuracyMetric()
 
+def answeredCorrectly(list_gold_answers, our_answers):
+    for item in list_gold_answers:
+        if type(item) is list:
+            gold_answer_set = [str(x) for x in item]
+            for gold_ans in gold_answer_set:
+                # Iterate over all the gold_ans
+                for our_ans in our_answers:
+                    # Iterate over all our answers
+                    if gold_ans == str(our_ans):
+                        # got the right answer
+                        return True
+        else:
+            # single answer like '40'
+            for ans in our_answers:
+                # Iterate over all our answers
+                if str(item) == str(ans):
+                    # got the right answer
+                    return True
+    return False
+
 def check_parses():
-    with open('curated-data/non-yahoo-questions-dev.json') as f:
+    with open('curated-data/non-yahoo-questions-dev-simplified.json') as f:
         examples = json.load(f)
         succ_parse = 0
         succ_solve = 0
+        right_answers = 0
         for example in examples:
             parses = grammar.parse_input(preprocess(example['text']))
             if len(parses) > 0:
+                succ_parse += 1
                 empty_answer = True
+                right_answer_check = False
                 for _, v in {str(s): s for s in [p.semantics for p in parses]}.iteritems():
                     try:
                         answer = domain.execute(v)
+                        print "Our answer(s): " + str(answer)
+                        print "Gold answer(s): " + str(example["combined_ansers"])
+                        if answeredCorrectly(example["combined_ansers"], answer):
+                            right_answer_check = True
                     except Exception as e:
                         print example['text']
                         raise e
@@ -518,15 +543,15 @@ def check_parses():
                         empty_answer = False
                 if empty_answer == False:
                     succ_solve += 1
-                    print u"✓", example['text']
-                else:
-                    print u"½", example['text']
-                succ_parse += 1
-            else:
-                print u'✗', example['text']
+                    if right_answer_check == True:
+                        print "Got this question right!"
+                        right_answers += 1
+                    else:
+                        print "Got this question wrong :("
 
         print "success parses", 100. * succ_parse / (len(examples))
         print "success solve", 100. * succ_solve / (len(examples))
+        print "right answers", 100. * right_answers / (len(examples))
 
 if __name__ == "__main__":
     domain = WordProbDomain()
