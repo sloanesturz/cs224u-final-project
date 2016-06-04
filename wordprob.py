@@ -51,15 +51,16 @@ def convertSemanticsToEqn(semantics):
         # base case
         return str(semantics)
     elif len(semantics) == 2:
-
-        if len(semantics[1]) == 3:
+        if type(semantics[1]) is int:
+            return str(semantics[1]) + str(semantics[0])
+        elif len(semantics[1]) == 3:
             # "consecutive" type questions where semantics are in the form:
             # ('+', ('2*x+1', '2*x+3', '2*x+5'))
-            return "(" + convertSemanticsToEqn(semantics[1][0]) + ")" + \
+            return "((" + convertSemanticsToEqn(semantics[1][0]) + ")" + \
                 convertSemanticsToEqn(semantics[0]) +  \
                 "(" + convertSemanticsToEqn(semantics[1][1]) + ")" + \
                 convertSemanticsToEqn(semantics[0]) + \
-                "(" + convertSemanticsToEqn(semantics[1][2]) + ")" \
+                "(" + convertSemanticsToEqn(semantics[1][2]) + "))" \
 
         elif len(semantics[1]) > 1:
             if "^" in semantics[0]:
@@ -69,7 +70,7 @@ def convertSemanticsToEqn(semantics):
             elif semantics[0] == "abs":
                 return "Abs(%s)" % convertSemanticsToEqn(semantics[1])
             else:
-                return "(" + convertSemanticsToEqn(semantics[1][0]) + ")" + str(semantics[0])  +  "(" + convertSemanticsToEqn(semantics[1][1]) + ")"
+                return "((" + convertSemanticsToEqn(semantics[1][0]) + ")" + str(semantics[0])  +  "(" + convertSemanticsToEqn(semantics[1][1]) + "))"
         else:
             return str(semantics[1]) + str(semantics[0])
 
@@ -115,8 +116,11 @@ class WordProbDomain(Domain):
             # add eqn to list of eqns
             final_eqns.append(eqn_as_string)
 
+        print final_eqns
+
         num_vars = solver.count_variables(final_eqns)
-        answers = solver.our_evaluate(final_eqns, num_vars, is_consecutive)
+        answers = solver.our_evaluate(final_eqns, num_vars, is_consecutive, "-")
+        answers += solver.our_evaluate(final_eqns, num_vars, is_consecutive, "+")
 
         # print answers
         return answers
@@ -349,7 +353,7 @@ class WordProbDomain(Domain):
         rules.extend([
             # Word
             Rule('$MidOperator', 'plus', '+'),
-            Rule('$MidOperator', 'minus', '+'),
+            Rule('$MidOperator', 'minus', '-'),
             Rule('$MidOperator', 'times', '*'),
             Rule('$MidOperator', 'time', '*'),
             Rule('$MidOperator', 'modulo', '%'),
@@ -534,8 +538,6 @@ def formatOurAnswers(our_answers):
     return list_of_answers
 
 def answeredCorrectly(gold_list_of_answers, list_of_answers, strictness):
-    print gold_list_of_answers
-    print list_of_answers
     for gold_answer_set in gold_list_of_answers:
         for our_answer_set in list_of_answers:
             if strictness == 'tight':
@@ -567,7 +569,7 @@ def check_parses():
                         answer = domain.execute(v)
                         print "Our answer(s): " + str(answer)
                         print "Gold answer(s): " + str(example["nice_answers"])
-                        if answeredCorrectly(gold_list_of_answers, formatOurAnswers(answer), 'tight'):
+                        if answeredCorrectly(gold_list_of_answers, formatOurAnswers(answer), 'loose'):
                             right_answer_check = True
                     except Exception as e:
                         print example['text']
@@ -577,6 +579,7 @@ def check_parses():
                 if empty_answer == False:
                     succ_solve += 1
                     if right_answer_check == True:
+                        print "The question: " + example["text"]
                         print "Got this question right!\n"
                         right_answers += 1
                     else:

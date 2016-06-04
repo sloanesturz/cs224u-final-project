@@ -10,18 +10,18 @@ from sympy.printing.pretty.pretty import pretty_print
 import re
 
 # helper function that
-def formattedString(eqn_as_string):
+def formattedString(eqn_as_string, op):
 	index_of_equal_signs = eqn_as_string.find("=")
-	final_form = eqn_as_string[0:index_of_equal_signs] + "-" + "(" + eqn_as_string[index_of_equal_signs + 1:] + ")"
+	final_form = eqn_as_string[0:index_of_equal_signs] + op + "(" + eqn_as_string[index_of_equal_signs + 1:] + ")"
 	return final_form
 
 # helper function that iterates over all the equations and converts them into
 # the proper form as sympy expressions
-def convertToSympyExprs(final_eqns):
+def convertToSympyExprs(final_eqns, op):
 	exprs = []
 	for eqn in final_eqns:
 		try:
-			sympy_expr = sympify(formattedString(eqn))
+			sympy_expr = sympify(formattedString(eqn, op))
 			exprs.append(sympy_expr)
 		except (SympifyError) as e:
 			print e
@@ -67,9 +67,11 @@ def createSymbols(num_variables, is_consecutive):
 
 class SympySolver():
 
-	def our_evaluate(self, final_eqns, num_variables, is_consecutive):
-		sympy_exprs = convertToSympyExprs(final_eqns)
-		if sympy_exprs == "Error thrown":
+	def our_evaluate(self, final_eqns, num_variables, is_consecutive, op):
+		sympy_exprs = convertToSympyExprs(final_eqns, op)
+		print sympy_exprs
+		if sympy_exprs == "Error thrown" or ">" in str(sympy_exprs) or "<" in str(sympy_exprs):
+			# we can't yet handle questions that contain less than or greater than
 			return []
 
 		symbols = createSymbols(num_variables, is_consecutive)
@@ -79,6 +81,8 @@ class SympySolver():
 			# we need to return answers for all terms! Not the answer for x
 			answers = dealWithConsecutives(answers, final_eqns)
 
+		# print symbols
+		# print answers
 		# we need to get the output into a format that we can compare with
 		# the answers in the json file
 		answer_array = []
