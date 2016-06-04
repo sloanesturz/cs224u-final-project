@@ -3,7 +3,9 @@ import json
 import sys
 
 from collections import defaultdict
+import collections
 from numbers import Number
+from itertools import chain
 
 from domain import Domain
 from example import Example
@@ -497,24 +499,54 @@ class WordProbDomain(Domain):
     def training_metric(self):
         return DenotationAccuracyMetric()
 
-def answeredCorrectly(list_gold_answers, our_answers):
-    for item in list_gold_answers:
-        if type(item) is list:
-            gold_answer_set = [str(x) for x in item]
-            for gold_ans in gold_answer_set:
-                # Iterate over all the gold_ans
-                for our_ans in our_answers:
-                    # Iterate over all our answers
-                    if gold_ans == str(our_ans):
-                        # got the right answer
-                        return True
+# returns an array where the elements are sets of gold answers
+# [set('-1'), set('13.33')]
+def formatGoldAnswers(nice_answers):
+    gold_list_of_answers = []
+    for item in nice_answers:
+        gold_answer_set = set()
+        if isinstance(item, collections.Iterable):
+            for gold_ans in item:
+                gold_answer_set.add(str(gold_ans))
+
+        # add set of answers to list of answers
+        gold_list_of_answers.append(gold_answer_set)
+
+    return gold_list_of_answers
+
+def formatOurAnswers(our_answers):
+    list_of_answers = []
+    our_answer_set = set()
+    for index in xrange(0, len(our_answers)):
+        answer = our_answers[index]
+        if isinstance(answer, collections.Iterable):
+            if(index != 0):
+                list_of_answers.append(our_answer_set)
+                our_answer_set = set()
+
+            for ans in answer:
+                our_answer_set.add(str(ans))
         else:
-            # single answer like '40'
-            for ans in our_answers:
-                # Iterate over all our answers
-                if str(item) == str(ans):
-                    # got the right answer
+            our_answer_set.add(str(answer))
+
+    list_of_answers.append(our_answer_set)
+
+    return list_of_answers
+
+def answeredCorrectly(gold_list_of_answers, list_of_answers, strictness):
+    print gold_list_of_answers
+    print list_of_answers
+    for gold_answer_set in gold_list_of_answers:
+        for our_answer_set in list_of_answers:
+            if strictness == 'tight':
+                # we need a direct match to count the answer as correct
+                if gold_answer_set == our_answer_set:
                     return True
+            else:
+                # our answer can be a subset of the actual answers or vice-versa
+                if gold_answer_set == our_answer_set or gold_answer_set.issubset(our_answer_set) or our_answer_set.issubset(gold_answer_set):
+                    return True
+
     return False
 
 def check_parses():
@@ -525,6 +557,7 @@ def check_parses():
         right_answers = 0
         for example in examples:
             parses = grammar.parse_input(preprocess(example['text']))
+            gold_list_of_answers = formatGoldAnswers(example["nice_answers"])
             if len(parses) > 0:
                 succ_parse += 1
                 empty_answer = True
@@ -533,8 +566,8 @@ def check_parses():
                     try:
                         answer = domain.execute(v)
                         print "Our answer(s): " + str(answer)
-                        print "Gold answer(s): " + str(example["combined_ansers"])
-                        if answeredCorrectly(example["combined_ansers"], answer):
+                        print "Gold answer(s): " + str(example["nice_answers"])
+                        if answeredCorrectly(gold_list_of_answers, formatOurAnswers(answer), 'tight'):
                             right_answer_check = True
                     except Exception as e:
                         print example['text']
@@ -544,10 +577,11 @@ def check_parses():
                 if empty_answer == False:
                     succ_solve += 1
                     if right_answer_check == True:
-                        print "Got this question right!"
+                        print "Got this question right!\n"
                         right_answers += 1
                     else:
-                        print "Got this question wrong :("
+                        print "The question: " + example["text"]
+                        print "Got this question wrong :(\n"
 
         print "success parses", 100. * succ_parse / (len(examples))
         print "success solve", 100. * succ_solve / (len(examples))

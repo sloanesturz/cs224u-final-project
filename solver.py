@@ -40,10 +40,15 @@ def dealWithConsecutives(answers_for_k, final_eqn_as_string):
 	for answer_for_k in answers_for_k:
 		# if we have more than one answer for k, we want to solve
 		# for the terms for each answer of k
+		temp = []
 		for term in terms:
 			sympy_expr = sympify(term)  # turn term into a sympy expression
 			term_answer = sympy_expr.subs(Symbol('k'), answer_for_k)  # subsitute answer for x into term
-			term_answers.append(term_answer)
+			temp.append(term_answer)
+
+		# each answer_for_k generates its own list of answers, we then store
+		# all lists of answers in the list of term_answers
+		term_answers.append(temp)
 
 	return term_answers
 
