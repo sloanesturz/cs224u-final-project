@@ -119,13 +119,19 @@ def load_rules():
     for prefix in ['', 'the ']:
         rules.extend([
             Rule('$PreOperator', prefix + 'sum of', '+'),
-            Rule('$PreOperator', prefix + 'difference of', '-'),
-            Rule('$PreOperator', prefix + 'difference between', '-'),
             Rule('$PreOperator', prefix + 'product of', '*'),
             Rule('$PreOperator', prefix + 'quotient of', '/'),
             Rule('$PreUnaryOperator', prefix + 'square root of', '^(1/2)'),
             Rule('$PreUnaryOperator', prefix + 'square of', '^2'),
             Rule('$PreUnaryOperator', prefix + 'cube of', '^3'),
+        ])
+
+    rules.append(Rule('$Expr', '$RevPreOperator $ExprList',
+        lambda sems: (sems[0], tuple(reversed(sems[1])))));
+    for prefix in ['', 'the ']:
+        rules.extend([
+            Rule('$RevPreOperator', prefix + 'difference of', '-'),
+            Rule('$RevPreOperator', prefix + 'difference between', '-'),
         ])
 
     rules.append(Rule('$Expr', '$Multiplier $Expr',
