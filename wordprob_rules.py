@@ -271,8 +271,14 @@ def load_rules():
         Rule('$MidOperator', '%', '%'),
         # Complex structure
         Rule('$MidOperator', 'more than', '+'),
-        Rule('$MidOperator', 'less than', '-'),
     ])
+
+    rules.extend([
+        Rule('$Expr', '$Expr ?$Comma $RevMidOperator $Expr ?$Comma',
+            lambda sems: (sems[2], sems[3], sems[0])),
+        Rule('$RevMidOperator', 'less than', '-'),
+    ])
+
 
     rules.extend([
         # Comparisons
