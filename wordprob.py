@@ -5,30 +5,72 @@ import sys
 from collections import defaultdict
 import collections
 from numbers import Number
-from itertools import chain
+from itertools import chain, product
 
 from domain import Domain
 from example import Example
 from experiment import evaluate_for_domain, evaluate_dev_examples_for_domain, train_test, train_test_for_domain, interact, learn_lexical_semantics, generate
 from metrics import DenotationAccuracyMetric
-from parsing import Grammar, Rule, print_grammar, compute_semantics
+from parsing import Grammar, print_grammar, compute_semantics
 from scoring import rule_features
 
 from nltk.tree import Tree
 from solver import SympySolver
+import wordprob_rules
 
-from num2words import num2words
-
-NUMBERS = [str(num2words(i)) for i in range(1000)]
 
 def str2tree(s):
     return Tree.fromstring(s)
 
-def preprocess(question):
-    # TODO: we could do a lot of good stuff here
+def format_text(question):
     split = re.findall(r"[A-Za-z\-']+|[.,!?;/=+*]|-?\d+", question.lower())
     text = " ".join(split)
-    text = text.replace('. .', '.') # TODO: make more general?
+    text = text.replace('. .', '.')
+    return text
+
+def find_number_variables(text):
+    split = text.split()
+    consecutive, even, count = False, None, None
+    for i, word in enumerate(split):
+        if word in ["numbers", "integers"]:
+            if i == 0 or split[i-1] == "the": continue
+            for desc in split[max(0, i-4):i]:
+                if desc == "consecutive":
+                    consecutive = True
+                elif desc == "even":
+                    even = True
+                elif desc == "odd":
+                    even = False
+                elif desc in ["2", "two"]:
+                    count = 2
+                elif desc in ["3", "three"]:
+                    count = 3
+                elif desc in ["4", "four"]:
+                    count = 4
+            if count is None:
+                count = 1
+            return consecutive, even, count
+    if count == None:
+        if 'another' in split:
+            return False, None, 2
+    return None, None, 1
+
+def replace_ambiguity(text):
+    prefix = ['their', 'whose']
+    op = ['sum', 'difference', 'product']
+
+    consecutive, even, count = find_number_variables(text)
+
+    for p, o in product(prefix, op):
+        q = "%s %s" % (p, o)
+        if q in text:
+            text = text.replace(q, "%s_%s %s" % (p, count, o))
+
+    return text
+
+def preprocess(question):
+    text = format_text(question)
+    text = replace_ambiguity(text)
     return text
 
 def make_examples(filename):
@@ -43,39 +85,67 @@ def make_examples(filename):
             )
     return examples
 
-def convertSemanticsToEqn(semantics):
+def is_variable(varname):
+    if not isinstance(varname, str):
+        return False
+    return bool(re.match(r'v-?\d+', varname))
+
+def translate_variable(varname, numvars):
+    if not is_variable(varname):
+        raise ValueError('%s is not a variable' % varname)
+    i = int(varname[1:])
+    if i < 0:
+        i = numvars - i
+    return "v%s" % i
+
+def convertSemanticsToEqn(semantics, numvars):
     if (type(semantics) is int) or \
             (type(semantics) is str) or \
-            (type(semantics) is float) or \
-            len(semantics) == 1:
+            (type(semantics) is float):
         # base case
-        return str(semantics)
+        if is_variable(semantics):
+            return translate_variable(semantics, numvars)
+        else:
+            return str(semantics)
+    elif len(semantics) == 1:
+        return convertSemanticsToEqn(semantics[0], numvars)
     elif len(semantics) == 2:
         if type(semantics[1]) is int:
             return str(semantics[1]) + str(semantics[0])
         elif len(semantics[1]) == 3:
             # "consecutive" type questions where semantics are in the form:
             # ('+', ('2*x+1', '2*x+3', '2*x+5'))
-            return "((" + convertSemanticsToEqn(semantics[1][0]) + ")" + \
-                convertSemanticsToEqn(semantics[0]) +  \
-                "(" + convertSemanticsToEqn(semantics[1][1]) + ")" + \
-                convertSemanticsToEqn(semantics[0]) + \
-                "(" + convertSemanticsToEqn(semantics[1][2]) + "))" \
+            return "((" + convertSemanticsToEqn(semantics[1][0], numvars) + ")" + \
+                convertSemanticsToEqn(semantics[0], numvars) +  \
+                "(" + convertSemanticsToEqn(semantics[1][1], numvars) + ")" + \
+                convertSemanticsToEqn(semantics[0], numvars) + \
+                "(" + convertSemanticsToEqn(semantics[1][2], numvars) + "))" \
 
         elif len(semantics[1]) > 1:
             if "^" in semantics[0]:
                 # cases where semantics are in the form:
                 # ('^2', ('+', ('1*x+0', '1*x+1')))
-                return "(" + convertSemanticsToEqn(semantics[1]) + ")" + str(semantics[0])
+                return "(" + convertSemanticsToEqn(semantics[1], numvars) + ")" + str(semantics[0])
             elif semantics[0] == "abs":
-                return "Abs(%s)" % convertSemanticsToEqn(semantics[1])
+                return "Abs(%s)" % convertSemanticsToEqn(semantics[1], numvars)
             else:
-                return "((" + convertSemanticsToEqn(semantics[1][0]) + ")" + str(semantics[0])  +  "(" + convertSemanticsToEqn(semantics[1][1]) + "))"
+                return "((" + convertSemanticsToEqn(semantics[1][0], numvars) + ")" + str(semantics[0])  +  "(" + convertSemanticsToEqn(semantics[1][1], numvars) + "))"
         else:
             return str(semantics[1]) + str(semantics[0])
 
     else:
-        return convertSemanticsToEqn(semantics[1]) + convertSemanticsToEqn(semantics[0]) + convertSemanticsToEqn(semantics[2])
+        return convertSemanticsToEqn(semantics[1], numvars) + convertSemanticsToEqn(semantics[0], numvars) + convertSemanticsToEqn(semantics[2], numvars)
+
+def getConsecutiveConstraints(count, consecutive, even):
+    start, mult = 0, 1
+    if even == False:
+        start = 1
+        mult = 2
+    if even == True:
+        mult = 2
+    return ["v%s = %s * k + %s" % (i, mult, start + mult*i)
+        for i in range(count)]
+
 
 class WordProbDomain(Domain):
 
@@ -101,404 +171,55 @@ class WordProbDomain(Domain):
             return total
         return [l]
 
-    def execute(self, semantics):
-        is_consecutive = False
-        if "k" in str(semantics):
-            is_consecutive = True
+    def split_semantics(self, semantics):
+        numvars, consecutive, even = None, None, None
+        for i, s in enumerate(semantics):
+            if len(s) != 2 or s[0] == '=':
+                break
+            if s[0] == 'numvars':
+                numvars = int(s[1])
+            if s[0] == 'consecutive':
+                consecutive = s[1]
+            if s[0] == 'even':
+                even = s[1]
 
-        # return semantics # TODO: replace
+        return numvars, consecutive, even, semantics[i:]
+
+    def execute(self, semantics):
         solver = SympySolver()
         answers = []
-        final_eqns = []
         semantics = self.flatten_list([semantics])
-        for semantic_rep in semantics:
-            eqn_as_string = convertSemanticsToEqn(semantic_rep)
-            # add eqn to list of eqns
-            final_eqns.append(eqn_as_string)
-
-        print final_eqns
+        count, consecutive, even, semantics = self.split_semantics(semantics)
+        final_eqns = [convertSemanticsToEqn(semantic, count) for semantic in semantics]
+        if consecutive:
+            final_eqns.extend(getConsecutiveConstraints(count, consecutive, even))
+        print final_eqns, count
 
         num_vars = solver.count_variables(final_eqns)
-        answers = solver.our_evaluate(final_eqns, num_vars, is_consecutive, "-")
-        answers += solver.our_evaluate(final_eqns, num_vars, is_consecutive, "+")
+        answers = solver.our_evaluate(final_eqns, count, consecutive, "-")
 
         # print answers
         return answers
 
     def rules(self):
-        rules = []
-
-        def push_list(head, tail):
-            return [head] + [tail]
-
-        for i, w in enumerate(NUMBERS):
-            rules.append(Rule('$Num', str(i), i))
-            rules.append(Rule('$Num', "- %s" % i, -i))
-            rules.append(Rule('$Num', w, i))
-            rules.append(Rule('$Num', "negative %s" % w, -i))
-            if '-' in w:
-                rules.append(Rule('$Num', w.replace('-', ' '), i))
-            if ' and ' in w:
-                rules.append(Rule('$Num', w.replace(' and ', ' '), i))
-
-        rules.extend([
-            # Odd type of problem: 'four plus four' -> x = 4 + 4
-            Rule('$E', '$Expr', lambda sems: ('=', sems[0], 'x')),
-
-            # Usual types of problem strucutre
-            Rule('$E', '?$Command $ConstraintList ?$Command', lambda sems: sems[1]),
-            Rule('$ConstraintList', '$Constraint ?$EOL', lambda sems: sems[0]),
-            Rule('$ConstraintList', '$Constraint ?$EOL ?$Joiner $ConstraintList',
-                lambda sems: push_list(sems[0], sems[3])),
-
-            Rule('$Joiner', 'and'),
-
-            # Generic constraint
-            Rule('$Constraint', '$EBO $Expr', lambda sems: (sems[0][0], sems[0][1], sems[1])),
-            Rule('$EBO', '$Expr $Compare', lambda sems: (sems[1], sems[0])),
-            Rule('$EOL', '.'),
-            Rule('$EOL', ','),
-            Rule('$EOL', '?'),
-            Rule('$Comma', ','),
-
-            # Constraints with leading or trailing Junk
-            Rule('$JunkList', '$Junk ?$JunkList'),
-            Rule('$Constraint', '$Find $Constraint', lambda sems: sems[1]),
-            Rule('$Constraint', '$Find $JunkList $If $Constraint', lambda sems: sems[3]),
-            Rule('$Constraint', '$If $Constraint ?$EOL $Find $JunkList', lambda sems: sems[1]),
-            Rule('$If', 'if'),
-            Rule('$If', 'such that'),
-            Rule('$Find', 'find'),
-            Rule('$Find', 'what'),
-
-            # Pre or postfix command sentence.
-            # TODO: extract a semantic meaning like ('find smallest') or ('find all')
-            Rule('$Command', '$Find $JunkList ?$EOL'),
-            Rule('$Command', '$What $WordIs $JunkList ?$EOL'),
-            Rule('$Command', '$I $Have $JunkList ?$EOL'),
-            Rule('$Command', '$Given $JunkList ?$EOL'),
-            Rule('$What', 'what'),
-            Rule('$WordIs', 'is'),
-            Rule('$WordIs', 'are'),
-            Rule('$Have', 'have'),
-            Rule('$I', 'i'),
-            Rule('$Given', 'given'),
-        ])
-
-        # Complex constraint: 'When x is added to y the result is z'
-        rules.extend([
-            Rule('$Constraint', '$Occasion $Expr $OccasionOpRtoL $Expr ?$EOL $ResultsIn $Expr',
-                lambda sems: ('=', (sems[2], sems[1], sems[3]), sems[6])),
-            Rule('$Occasion', 'when'),
-            Rule('$Occasion', 'if'),
-            Rule('$OccasionOpRtoL', 'is added to', '+'),
-            Rule('$OccasionOpRtoL', 'is multiplied by', '*'),
-            Rule('$OccasionOpRtoL', 'is divided by', '/'),
-
-            Rule('$Constraint', '$Occasion $Expr $OccasionOpLtoR $Expr ?$EOL $ResultsIn $Expr',
-                lambda sems: ('=', (sems[2], sems[3], sems[1]), sems[6])),
-            Rule('$OccasionOpLtoR', 'is subtracted from', '-'),
-
-            Rule('$ResultsIn', 'the result is'),
-        ])
-
-        # Non-standard constraint OperateAndEquality
-        rules.extend([
-            Rule('$Constraint', '?$Question $ExprList $OperatorAndEquality $Expr',
-                lambda sems: ('=', (sems[2], sems[1]), sems[3])),
-            Rule('$OperatorAndEquality', 'total to', '+'),
-            Rule('$OperatorAndEquality', 'sum to', '+'),
-            Rule('$OperatorAndEquality', 'total', '+'),
-            Rule('$OperatorAndEquality', 'sum', '+'),
-            Rule('$OperatorAndEquality', 'add up to', '+'),
-            Rule('$OperatorAndEquality', 'have a sum of', '+'),
-            Rule('$OperatorAndEquality', 'have a total of', '+'),
-            Rule('$OperatorAndEquality', 'have a difference of', '-'),
-            Rule('$OperatorAndEquality', 'have the sum of', '+'),
-            Rule('$OperatorAndEquality', 'have the total of', '+'),
-            Rule('$OperatorAndEquality', 'have the difference of', '-'),
-            Rule('$OperatorAndEquality', 'differ by', '-'),
-            Rule('$Question', 'which'),
-            Rule('$Question', 'what'),
-        ])
-
-        # PreOperator
-        rules.append(Rule('$Expr', '$PreOperator $ExprList', lambda sems: (sems[0], sems[1])))
-        rules.append(Rule('$Expr', '$PreUnaryOperator $Expr', lambda sems: (sems[0], sems[1])));
-        for prefix in ['', 'the ']:
-            rules.extend([
-                Rule('$PreOperator', prefix + 'sum of', '+'),
-                Rule('$PreOperator', prefix + 'difference of', '-'),
-                Rule('$PreOperator', prefix + 'difference between', '-'),
-                Rule('$PreOperator', prefix + 'product of', '*'),
-                Rule('$PreOperator', prefix + 'quotient of', '/'),
-                Rule('$PreUnaryOperator', prefix + 'square root of', '^(1/2)'),
-                Rule('$PreUnaryOperator', prefix + 'square of', '^2'),
-                Rule('$PreUnaryOperator', prefix + 'cube of', '^3'),
-            ])
-
-        rules.append(Rule('$Expr', '$Multiplier $Expr',
-            lambda sems: ('*', (sems[0], sems[1]))))
-
-        rules.extend([
-            Rule('$Multiplier', 'twice', 2),
-            Rule('$Multiplier', 'triple', 3),
-            Rule('$Multiplier', 'quadruple', 4),
-            Rule('$Multiplier', 'half', 1./2),
-
-            # two times the first plus 'a fourth the second'
-            Rule('$Multiplier', '?$A $Fraction ?$Of', lambda sems: sems[1]),
-            # two times the first plus ' fourth of the second'
-            Rule('$Multiplier', '$Expr $Of', lambda sems: sems[0]),
-            # two times the first plus '3/4 of the second'
-            Rule('$Multiplier', '$Num $Div $Num',
-                lambda sems: 1. * sems[0] / sems[2]),
-            Rule('$Of', 'of'),
-            Rule('$A', 'one'),
-            Rule('$A', 'a'),
-            Rule('$Div', '/')
-        ])
-
-        for prefix in ['', 'one-']:
-            rules.extend([
-                Rule('$Fraction', prefix + 'fifth', 1./5),
-                Rule('$Fraction', prefix + 'fourth', 1./4),
-                Rule('$Fraction', prefix + 'third', 1./3),
-                Rule('$Fraction', prefix + 'third', 1./3),
-                Rule('$Fraction', prefix + 'half', 1./2),
-            ])
-
-
-        def consecutive_integers(n, is_even, mult=None):
-            # n -> number of Integers
-            # is_even -> (True, False, None) == (even, odd, consec)
-            try:
-                count = int(n)
-            except (ValueError, TypeError) as e:
-                try:
-                    count = NUMBERS.index(n)
-                except:
-                    count = 2 # TODO: not this number
-            start = -1 if is_even == False else 0
-            if mult is None:
-                mult = 2 if is_even in (True, False) else 1
-            return tuple('%s*k+%s' % (mult, mult * i + start) for i in range(count))
-
-        rules.extend([
-            # ExprList
-            Rule('$ExprList', '$Expr $And $Expr', lambda sems: (sems[0], sems[2])),
-            Rule('$And', 'and'),
-            Rule('$ExprList', '$The ?$SetDescriptor ?$Integers', ('x', 'y')),
-            Rule('$ExprList', '?$The ?$SetDescriptor $Two ?$Integers', ('x', 'y')),
-            Rule('$ExprList', '$The ?$SetDescriptor ?$Integers', ('x', 'y', 'z')),
-            Rule('$ExprList', '?$The ?$SetDescriptor $Three ?$Integers', ('x', 'y', 'z')),
-
-            Rule('$The', 'the'),
-            Rule('$Two', '2'),
-            Rule('$Two', 'two'),
-            Rule('$Three', '3'),
-            Rule('$Three', 'three'),
-
-            Rule('$SetDescriptor', 'same'),
-            Rule('$SetDescriptor', 'all'),
-
-            Rule('$ExprList', '?$The $EndDescriptor $Two $Integers',
-                lambda sems: ('x', 'y', 'z')[sems[1][0]:sems[1][1]]),
-            Rule('$EndDescriptor', 'larger', (1, 3)),
-            Rule('$EndDescriptor', 'largest', (1, 3)),
-            Rule('$EndDescriptor', 'smaller', (0, 2)),
-            Rule('$EndDescriptor', 'smallest', (0, 2)),
-
-            # # Is this crazy?! Probably!
-            Rule('$ExprList', 'its digits',
-                (('%', ('/', 'x', 10), 10), ('%', 'x', 10))),
-            Rule('$ExprList', 'the digits of a two-digit number',
-                (('%', ('/', 'x', 10), 10), ('%', 'x', 10))),
-            Rule('$ExprList', 'the digits of a 2-digit number',
-                (('%', ('/', 'x', 10), 10), ('%', 'x', 10))),
-            Rule('$ExprList', 'the digits',
-                (('%', ('/', 'x', 10), 10), ('%', 'x', 10))),
-
-            Rule('$ExprList', '$ExprList $PostMappingOperator',
-                lambda sems: tuple((sems[1], item) for item in sems[0])),
-            Rule('$PostMappingOperator', 'whose squares', '^2'),
-
-            Rule('$ExprList', '$PreMappingOperator $ExprList',
-                lambda sems: tuple((sems[0], item) for item in sems[1])),
-            Rule('$PreMappingOperator', 'the squares of', '^2'),
-            Rule('$PreMappingOperator', 'the roots of', '^(.5)'),
-            Rule('$PreMappingOperator', 'the reciprocals of', '^(-1)'),
-
-            Rule('$ExprList', '$Expr ?$Sign $Consecutive ?$Sign ?$Even ?$Sign $Integers ?$Parenthetical',
-                lambda sems: consecutive_integers(sems[0], sems[4])),
-            Rule('$Consecutive', 'consecutive'),
-            Rule('$Even', 'even', True),
-            Rule('$Even', 'odd', False),
-            Rule('$Integers', 'integers'),
-            Rule('$Integers', 'numbers'),
-            Rule('$Sign', 'positive'),
-            Rule('$Sign', 'negative'),
-
-            Rule('$ExprList', '$Num $Consecutive $Multiples $Of $Num',
-                lambda sems: consecutive_integers(sems[0], None, sems[4])),
-            Rule('$Multiples', 'multiples'),
-
-            Rule('$Parenthetical', '$Expr $Comma $Expr ?$Comma $And $Expr'),
-
-            # MidOperator
-            Rule('$Expr', '$Expr ?$Comma $MidOperator $Expr ?$Comma',
-                lambda sems: (sems[2], sems[0], sems[3])),
-        ])
-
-        rules.extend([
-            # Word
-            Rule('$MidOperator', 'plus', '+'),
-            Rule('$MidOperator', 'minus', '-'),
-            Rule('$MidOperator', 'times', '*'),
-            Rule('$MidOperator', 'time', '*'),
-            Rule('$MidOperator', 'modulo', '%'),
-        ])
-
-        for prefix in ['', 'when ']:
-            rules.extend([
-                Rule('$MidOperator', prefix + 'added to', '+'),
-                Rule('$MidOperator', prefix + 'multiplied by', '+'),
-                Rule('$MidOperator', prefix + 'divided by', '/'),
-                Rule('$MidOperator', prefix + 'decreased by', '-'),
-            ])
-
-        rules.extend([
-            # Literal
-            Rule('$MidOperator', '+', '+'),
-            Rule('$MidOperator', '-', '-'),
-            Rule('$MidOperator', '*', '*'),
-            Rule('$MidOperator', '/', '/'),
-            Rule('$MidOperator', '%', '%'),
-            # Complex structure
-            Rule('$MidOperator', 'more than', '+'),
-            Rule('$MidOperator', 'less than', '-'),
-        ])
-
-        rules.extend([
-            # Comparisons
-            Rule('$Compare', 'is', '='),
-            Rule('$Compare', 'equals', '='),
-            Rule('$Compare', '=', '='),
-            Rule('$Compare', 'is equal to', '='),
-            Rule('$Compare', 'is less than', '<'),
-            Rule('$Compare', 'is less than or equal to', '<='),
-            Rule('$Compare', 'is greater than', '>'),
-            Rule('$Compare', 'is greater than or equal to', '>='),
-
-            # SplitComparison
-            # Type a. X exceeds Y by Z
-            Rule('$Constraint', '$Expr $SplitComparison $Expr $By $Expr',
-                lambda sems: ('=', (sems[0], (sems[1], sems[2], sems[4])))),
-            # Type b: X is Z more than Y
-            Rule('$Constraint', '$Expr $Is $Expr $SplitComparison $Expr',
-                lambda sems: ('=', (sems[0], (sems[3], sems[4], sems[2])))),
-
-            Rule('$SplitComparison', 'exceeds', '+'),
-            Rule('$SplitComparison', 'is greater than', '+'),
-            Rule('$SplitComparison', 'is less than', '-'),
-            Rule('$SplitComparison', 'more than', '+'),
-            Rule('$SplitComparison', 'less than', '-'),
-
-            Rule('$By', 'by'),
-            Rule('$Is', 'is'),
-        ])
-
-        rules.extend([
-            # Properties
-            Rule('$Expr', 'its square', ('^2', 'x')),
-            Rule('$Expr', 'its root', ('^1/2', 'x')),
-
-            # These examples make me uncomfortable a little.
-            # Find two consecutive ints which add to 4 and 'whose product is X'
-            # Can we fix coref?
-            Rule('$Expr', '$Group $GroupOp', lambda sems: (sems[1], sems[0])),
-            Rule('$Group', 'their', ('x', 'y')),
-            Rule('$Group', 'their', ('x', 'y', 'z')),
-            Rule('$Group', 'whose', ('x', 'y')),
-            Rule('$Group', 'whose', ('x', 'y', 'z')),
-            Rule('$Group', 'the', ('x', 'y')),
-            Rule('$Group', 'the', ('x', 'y', 'z')),
-
-            Rule('$GroupOp', 'sum', '+'),
-            Rule('$GroupOp', 'sums', '+'),
-            Rule('$GroupOp', 'difference', '-'),
-            Rule('$GroupOp', 'differences', '-'),
-            Rule('$GroupOp', 'product', '*'),
-            Rule('$GroupOp', 'products', '*'),
-
-            # This one feels safe: 'two consecutive ints whose sum is 7'
-            Rule('$Expr', '$ExprList $Group $GroupOp', lambda sems: (sems[2], sems[0])),
-        ])
-
-        rules.extend([
-            # Numbers and Variables
-            Rule('$Expr', '$Num', lambda sems: (sems[0])),
-            Rule('$Expr', '$Var', lambda sems: (sems[0])),
-
-            Rule('$Var', 'x', 'x'),
-            Rule('$Var', 'y', 'y'),
-            Rule('$Var', 'z', 'z'),
-
-            Rule('$Number', 'number'),
-            Rule('$Number', 'no .'),
-            Rule('$Number', 'integer'),
-            Rule('$Number', 'one'), # 'the smaller one'
-
-            Rule('$PrimaryArticle', 'a'),
-            Rule('$PrimaryArticle', 'an'),
-            Rule('$PrimaryArticle', 'one'),
-            Rule('$PrimaryArticle', 'the'),
-            Rule('$PrimaryArticle', 'the smallest'),
-            Rule('$PrimaryArticle', 'the smaller'),
-            Rule('$PrimaryArticle', 'the least'),
-            Rule('$PrimaryArticle', 'the same'),
-            Rule('$PrimaryArticle', 'that'),
-            Rule('$PrimaryArticle', 'the first'),
-
-            Rule('$Var', '$PrimaryArticle ?$NumberDescriptor ?$Number', 'x'),
-
-            Rule('$NumberDescriptor', 'positive'),
-            Rule('$NumberDescriptor', 'constant'),
-            Rule('$NumberDescriptor', 'negative'),
-            Rule('$NumberDescriptor', 'whole'),
-            Rule('$NumberDescriptor', 'natural'),
-
-            Rule('$Var', '$SecondaryArticle ?$NumberDescriptor ?$Number', 'y'),
-            Rule('$SecondaryArticle', 'another'),
-            Rule('$SecondaryArticle', 'the other'),
-            Rule('$SecondaryArticle', 'the larger'),
-            Rule('$SecondaryArticle', 'the second'),
-            Rule('$SecondaryArticle', 'a larger'),
-            Rule('$SecondaryArticle', 'a second'),
-
-
-            Rule('$Var', '$TertiaryArticle ?$NumberDescriptor ?$Number', 'z'),
-            Rule('$TertiaryArticle', 'the largest'),
-            Rule('$TertiaryArticle', 'the greatest'),
-            Rule('$TertiaryArticle', 'the third'),
-            Rule('$TertiaryArticle', 'a largest'),
-            Rule('$TertiaryArticle', 'a third'),
-
-            Rule('$Expr', '$Selector $ExprList', lambda sems: sems[1][sems[0]]),
-            Rule('$Selector', 'the smallest of', 0),
-            Rule('$Selector', 'the largest of', -1),
-        ])
-
-        # Add in a class called '$Junk' for words that don't matter
-        # Vocab.txt contains all the vocab used in grammar
-        with open('vocab.txt') as f:
-            for line in f:
-                rules.append(Rule('$Junk', line.strip()))
-
-        return rules
+        return wordprob_rules.load_rules()
 
     def grammar(self):
-        return Grammar(rules=self.rules(), start_symbol='$E')
+        class WordProbGrammar(Grammar):
+            def parse_input(self, input):
+                parses = Grammar.parse_input(self, input)
+                consecutive, even, count = find_number_variables(input)
+
+                for parse in parses:
+                    if isinstance(parse.semantics, tuple):
+                        parse.semantics = [parse.semantics]
+                    parse.semantics.insert(0, ('numvars', count))
+                    if consecutive:
+                        parse.semantics.insert(0, ('consecutive', True))
+                    if even == True or even == False:
+                        parse.semantics.insert(0, ('even', even))
+                return parses
+        return WordProbGrammar(rules=self.rules(), start_symbol='$E')
 
     def training_metric(self):
         return DenotationAccuracyMetric()
@@ -546,13 +267,15 @@ def answeredCorrectly(gold_list_of_answers, list_of_answers, strictness):
                     return True
             else:
                 # our answer can be a subset of the actual answers or vice-versa
-                if gold_answer_set == our_answer_set or gold_answer_set.issubset(our_answer_set) or our_answer_set.issubset(gold_answer_set):
+                if gold_answer_set == our_answer_set or \
+                        gold_answer_set.issubset(our_answer_set) or \
+                        our_answer_set.issubset(gold_answer_set):
                     return True
 
     return False
 
 def check_parses():
-    with open('curated-data/non-yahoo-questions-dev-simplified.json') as f:
+    with open('curated-data/non-yahoo-questions-dev-no-repetitions.json') as f:
         examples = json.load(f)
         succ_parse = 0
         succ_solve = 0
@@ -567,12 +290,14 @@ def check_parses():
                 for _, v in {str(s): s for s in [p.semantics for p in parses]}.iteritems():
                     try:
                         answer = domain.execute(v)
-                        print "Our answer(s): " + str(answer)
-                        print "Gold answer(s): " + str(example["nice_answers"])
+                        print example['text']
+                        print "\t", "Our answer(s): " + str(answer)
+                        print "\t", "Gold answer(s): " + str(example["nice_answers"])
                         if answeredCorrectly(gold_list_of_answers, formatOurAnswers(answer), 'loose'):
                             right_answer_check = True
                     except Exception as e:
                         print example['text']
+                        import traceback; print traceback.format_exc()
                         raise e
                     if len(answer) != 0:
                         empty_answer = False
@@ -598,13 +323,14 @@ if __name__ == "__main__":
     if '--check-parses' in sys.argv:
         check_parses()
     elif input:
-        print input
-        parses = grammar.parse_input(preprocess(input))
+        text = preprocess(input)
+        print text
+        parses = grammar.parse_input(text)
 
         print "Number of parses: {0}".format(len(parses))
         for _, v in {str(s): s for s in [p.semantics for p in parses]}.iteritems():
             print v
-            print "answer: " + str(domain.execute(v))
+            print "answer: ", domain.execute(v)
         if len(parses) == 0:
             print 'no parses'
     else:

@@ -53,17 +53,10 @@ def dealWithConsecutives(answers_for_k, final_eqn_as_string):
 	return term_answers
 
 def createSymbols(num_variables, is_consecutive):
+	symbols = [Symbol('v%s' % i) for i in range(num_variables)]
 	if is_consecutive:
-		return Symbol('k')
-	sympy_symbols = []
-
-	possible_symbols = ['x', 'y', 'z']
-	for i in range(0, num_variables):
-		# create sympy symbol
-		cur_symbol = Symbol(possible_symbols[i])
-		sympy_symbols.append(cur_symbol)
-
-	return sympy_symbols
+		symbols = [Symbol('k')] + symbols
+	return symbols
 
 class SympySolver():
 
@@ -76,29 +69,15 @@ class SympySolver():
 
 		symbols = createSymbols(num_variables, is_consecutive)
 		answers = solve(sympy_exprs, symbols)  # unpack symbols into parameters
-		if is_consecutive:
-			# dealing with a "consecutive" type of problem with only one equation
-			# we need to return answers for all terms! Not the answer for x
-			answers = dealWithConsecutives(answers, final_eqns)
 
-		# print symbols
-		# print answers
-		# we need to get the output into a format that we can compare with
-		# the answers in the json file
-		answer_array = []
-		if len(answers) == 0: return [] 
-
-		if type(answers) is dict:
-			for variable, answer in answers.iteritems():
-				answer_array.append(answer)
-		elif type(answers[0]) is dict:
-			answer_array = []
-		else:
-			# case: answers is a list with the right answers
-			answer_array = answers
-
-		return answer_array
-
+		if isinstance(answers, dict):
+			try:
+				return sorted([v for k, v in answers.iteritems() if k.name[0] == 'v'])
+			except:
+				# Impossible to know for sure, but this probably means we didn't find an answer
+				return []
+		elif isinstance(answers, list):
+			return []
 
 	def count_variables(self, eqns):
 		observed_vars = set()
