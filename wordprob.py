@@ -98,6 +98,7 @@ def translate_variable(varname, numvars):
         i = numvars - i
     return "v%s" % i
 
+UNARY_OPS = set(['^2', '^3', '^(-1)', '^(1/2)'])
 def convertSemanticsToEqn(semantics, numvars):
     if (type(semantics) is int) or \
             (type(semantics) is str) or \
@@ -108,33 +109,38 @@ def convertSemanticsToEqn(semantics, numvars):
         else:
             return str(semantics)
     elif len(semantics) == 1:
+        # collapse nested tuples
         return convertSemanticsToEqn(semantics[0], numvars)
-    elif len(semantics) == 2:
-        if type(semantics[1]) is int:
-            return str(semantics[1]) + str(semantics[0])
-        elif len(semantics[1]) == 3:
-            # "consecutive" type questions where semantics are in the form:
-            # ('+', ('2*x+1', '2*x+3', '2*x+5'))
-            return "((" + convertSemanticsToEqn(semantics[1][0], numvars) + ")" + \
-                convertSemanticsToEqn(semantics[0], numvars) +  \
-                "(" + convertSemanticsToEqn(semantics[1][1], numvars) + ")" + \
-                convertSemanticsToEqn(semantics[0], numvars) + \
-                "(" + convertSemanticsToEqn(semantics[1][2], numvars) + "))" \
 
-        elif len(semantics[1]) > 1:
-            if "^" in semantics[0]:
-                # cases where semantics are in the form:
-                # ('^2', ('+', ('1*x+0', '1*x+1')))
-                return "(" + convertSemanticsToEqn(semantics[1], numvars) + ")" + str(semantics[0])
-            elif semantics[0] == "abs":
-                return "Abs(%s)" % convertSemanticsToEqn(semantics[1], numvars)
-            else:
-                return "((" + convertSemanticsToEqn(semantics[1][0], numvars) + ")" + str(semantics[0])  +  "(" + convertSemanticsToEqn(semantics[1][1], numvars) + "))"
-        else:
-            return str(semantics[1]) + str(semantics[0])
-
+    # handle operators
+    if semantics[0] in UNARY_OPS:
+        return "(" + convertSemanticsToEqn(semantics[1], numvars) + semantics[0] + ")"
     else:
-        return convertSemanticsToEqn(semantics[1], numvars) + convertSemanticsToEqn(semantics[0], numvars) + convertSemanticsToEqn(semantics[2], numvars)
+        if len(semantics) == 2:
+            op = semantics[0]
+            arguments = ["(" + convertSemanticsToEqn(s, numvars) + ")"
+                        for s in semantics[1]]
+            return "(" + op.join(arguments) + ")"
+        else:
+            op = semantics[0]
+            arguments = ["(" + convertSemanticsToEqn(s, numvars) + ")"
+                        for s in semantics[1:]]
+            return "(" + op.join(arguments) + ")"
+
+        # elif len(semantics[1]) > 1:
+        #     if "^" in semantics[0]:
+        #         # cases where semantics are in the form:
+        #         # ('^2', ('+', ('1*x+0', '1*x+1')))
+        #         return "(" + convertSemanticsToEqn(semantics[1], numvars, sign) + ")" + str(semantics[0])
+        #     elif semantics[0] == "abs":
+        #         return "Abs(%s)" % convertSemanticsToEqn(semantics[1], numvars, sign)
+        #     else:
+        #         return "((" + convertSemanticsToEqn(semantics[1][0], numvars, sign) + ")" + str(semantics[0])  +  "(" + convertSemanticsToEqn(semantics[1][1], numvars, sign) + "))"
+        # else:
+        #     return str(semantics[1]) + str(semantics[0])
+
+    # else:
+    #     return convertSemanticsToEqn(semantics[1], numvars, sign) + convertSemanticsToEqn(semantics[0], numvars) + convertSemanticsToEqn(semantics[2], numvars)
 
 def getConsecutiveConstraints(count, consecutive, even):
     start, mult = 0, 1
@@ -296,17 +302,16 @@ def check_parses():
                     # if len(answer) != 0:
                     #     empty_answer = False
 
+                num_correct = len([1 for answer in gathered_answers if answeredCorrectly(gold_list_of_answers, formatOurAnswers(answer), 'loose') == True])
                 print example["text"]
                 print "\t", "We generated %s solutions (%s empty)" % \
-                    (len(gathered_answers), len([a for a in gathered_answers if len(a) == 0]))
-                num_correct = len([1 for answer in gathered_answers
-                                  if answeredCorrectly(gold_list_of_answers, formatOurAnswers(answer), 'loose') == True])
-                print "\t", "%s of them are correct" % num_correct
+                    (len(gathered_answers), len([a for a in gathered_answers if len(a) != 0]))
+                print "\t", "%s of them are correct" % \
+                    num_correct
                 print "\t", "Gold answer(s): " + str(example["nice_answers"])
                 print "\t", "Our answer(s): " + str(gathered_answers)
                 if num_correct > 0:
                     succ_solve += 1
-
                 # if empty_answer == False:
                 #     succ_solve += 1
                 #     if right_answer_check == True:
@@ -317,7 +322,7 @@ def check_parses():
                 #         print "The question: " + example["text"]
                 #         print "Got this question wrong :(\n"
 
-        # print "success parses", 100. * succ_parse / (len(examples))
+        print "success parses", 100. * succ_parse / (len(examples))
         print "success solve", 100. * succ_solve / (len(examples))
         # print "right answers", 100. * right_answers / (len(examples))
 
