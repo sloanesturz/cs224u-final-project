@@ -127,21 +127,6 @@ def convertSemanticsToEqn(semantics, numvars):
                         for s in semantics[1:]]
             return "(" + op.join(arguments) + ")"
 
-        # elif len(semantics[1]) > 1:
-        #     if "^" in semantics[0]:
-        #         # cases where semantics are in the form:
-        #         # ('^2', ('+', ('1*x+0', '1*x+1')))
-        #         return "(" + convertSemanticsToEqn(semantics[1], numvars, sign) + ")" + str(semantics[0])
-        #     elif semantics[0] == "abs":
-        #         return "Abs(%s)" % convertSemanticsToEqn(semantics[1], numvars, sign)
-        #     else:
-        #         return "((" + convertSemanticsToEqn(semantics[1][0], numvars, sign) + ")" + str(semantics[0])  +  "(" + convertSemanticsToEqn(semantics[1][1], numvars, sign) + "))"
-        # else:
-        #     return str(semantics[1]) + str(semantics[0])
-
-    # else:
-    #     return convertSemanticsToEqn(semantics[1], numvars, sign) + convertSemanticsToEqn(semantics[0], numvars) + convertSemanticsToEqn(semantics[2], numvars)
-
 def getConsecutiveConstraints(count, consecutive, even):
     start, mult = 0, 1
     if even == False:
@@ -294,33 +279,21 @@ def check_parses():
                 gathered_answers = []
                 for _, v in {str(s): s for s in [p.semantics for p in parses]}.iteritems():
                     try:
-                        gathered_answers.append(domain.execute(v))
+                        answer = domain.execute(v)
+                        if len(answer) != 0: gathered_answers.append(answer)
                     except Exception as e:
                         print example['text']
                         import traceback; print traceback.format_exc()
                         raise e
-                    # if len(answer) != 0:
-                    #     empty_answer = False
 
                 num_correct = len([1 for answer in gathered_answers if answeredCorrectly(gold_list_of_answers, formatOurAnswers(answer), 'loose') == True])
                 print example["text"]
-                print "\t", "We generated %s solutions (%s empty)" % \
-                    (len(gathered_answers), len([a for a in gathered_answers if len(a) != 0]))
-                print "\t", "%s of them are correct" % \
-                    num_correct
+                print "\t", "We generated %s solutions" % len(gathered_answers)
+                print "\t", "%s of them are correct" % num_correct
                 print "\t", "Gold answer(s): " + str(example["nice_answers"])
                 print "\t", "Our answer(s): " + str(gathered_answers)
                 if num_correct > 0:
                     succ_solve += 1
-                # if empty_answer == False:
-                #     succ_solve += 1
-                #     if right_answer_check == True:
-                #         print "The question: " + example["text"]
-                #         print "Got this question right!\n"
-                #         right_answers += 1
-                #     else:
-                #         print "The question: " + example["text"]
-                #         print "Got this question wrong :(\n"
 
         print "success parses", 100. * succ_parse / (len(examples))
         print "success solve", 100. * succ_solve / (len(examples))
@@ -340,8 +313,7 @@ if __name__ == "__main__":
 
         print "Number of parses: {0}".format(len(parses))
         for _, v in {str(s): s for s in [p.semantics for p in parses]}.iteritems():
-            print v
-            print "answer: ", domain.execute(v)
+            print domain.execute(v)
         if len(parses) == 0:
             print 'no parses'
     else:

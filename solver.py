@@ -76,6 +76,11 @@ class SympySolver():
 				# Impossible to know for sure, but this probably means we didn't find an answer
 				return []
 		elif isinstance(answers, list):
+
+			if len(answers) != 0 and ("v" in str(answers) or "I" in str(answers)):
+				# answer contains a variable or is not real
+				return []
+			
 			return answers
 
 	def count_variables(self, eqns):
