@@ -360,10 +360,9 @@ if __name__ == "__main__":
 
     input = " ".join(sys.argv[1:])
     if '--check-parses' in sys.argv:
-        if '--check-parses-total' in sys.argv:
-            multiple_runs()
-        else:
-            check_parses()
+        check_parses()
+    elif '--check-parses-total' in sys.argv:
+        multiple_runs()
     elif input:
         text = preprocess(input)
         print text
