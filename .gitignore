@@ -1,3 +1,11 @@
+## Added by sloane
+report/acl2014.aux
+report/acl2014.fdb_latexmk
+report/acl2014.fls
+report/acl2014.pdf
+report/acl2014.synctex.gz
+
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
