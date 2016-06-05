@@ -76,7 +76,7 @@ class SympySolver():
 				# Impossible to know for sure, but this probably means we didn't find an answer
 				return []
 		elif isinstance(answers, list):
-			return []
+			return answers
 
 	def count_variables(self, eqns):
 		observed_vars = set()

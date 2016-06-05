@@ -368,6 +368,7 @@ def load_rules():
         Rule('$PrimaryArticle', 'the first'),
 
         Rule('$Var', '$PrimaryArticle ?$NumberDescriptor ?$Number', varname(0)),
+        Rule('$Var', '$PrimaryArticle ?$NumberDescriptor ?$Number', varname(1)),
 
         Rule('$NumberDescriptor', 'positive'),
         Rule('$NumberDescriptor', 'constant'),
@@ -376,6 +377,7 @@ def load_rules():
         Rule('$NumberDescriptor', 'natural'),
 
         Rule('$Var', '$SecondaryArticle ?$NumberDescriptor ?$Number', varname(1)),
+        Rule('$Var', '$SecondaryArticle ?$NumberDescriptor ?$Number', varname(0)),
         Rule('$SecondaryArticle', 'another'),
         Rule('$SecondaryArticle', 'the other'),
         Rule('$SecondaryArticle', 'the larger'),

@@ -267,8 +267,7 @@ def answeredCorrectly(gold_list_of_answers, list_of_answers, strictness):
             else:
                 # our answer can be a subset of the actual answers or vice-versa
                 if gold_answer_set == our_answer_set or \
-                        gold_answer_set.issubset(our_answer_set) or \
-                        our_answer_set.issubset(gold_answer_set):
+                        gold_answer_set.issubset(our_answer_set):
                     return True
 
     return False
@@ -299,11 +298,15 @@ def check_parses():
 
                 print example["text"]
                 print "\t", "We generated %s solutions (%s empty)" % \
-                    (len(gathered_answers), len([a for a in gathered_answers if len(a) != 0]))
-                print "\t", "%s of them are correct" % \
-                    len([1 for answer in gathered_answers if answeredCorrectly(gold_list_of_answers, formatOurAnswers(answer), 'loose') == True])
+                    (len(gathered_answers), len([a for a in gathered_answers if len(a) == 0]))
+                num_correct = len([1 for answer in gathered_answers
+                                  if answeredCorrectly(gold_list_of_answers, formatOurAnswers(answer), 'loose') == True])
+                print "\t", "%s of them are correct" % num_correct
                 print "\t", "Gold answer(s): " + str(example["nice_answers"])
                 print "\t", "Our answer(s): " + str(gathered_answers)
+                if num_correct > 0:
+                    succ_solve += 1
+
                 # if empty_answer == False:
                 #     succ_solve += 1
                 #     if right_answer_check == True:
@@ -315,7 +318,7 @@ def check_parses():
                 #         print "Got this question wrong :(\n"
 
         # print "success parses", 100. * succ_parse / (len(examples))
-        # print "success solve", 100. * succ_solve / (len(examples))
+        print "success solve", 100. * succ_solve / (len(examples))
         # print "right answers", 100. * right_answers / (len(examples))
 
 if __name__ == "__main__":
