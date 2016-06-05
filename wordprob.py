@@ -191,7 +191,6 @@ class WordProbDomain(Domain):
         num_vars = solver.count_variables(final_eqns)
         answers = solver.our_evaluate(final_eqns, count, consecutive, "-")
 
-        # print answers
         return answers
 
     def rules(self):
@@ -225,7 +224,10 @@ def formatGoldAnswers(nice_answers):
         gold_answer_set = set()
         if isinstance(item, collections.Iterable):
             for gold_ans in item:
-                gold_answer_set.add(str(gold_ans))
+                if "/" not in str(gold_ans) and "n" not in str(gold_ans):
+                    gold_answer_set.add(str(round(float(gold_ans),2)))
+                else:
+                    gold_answer_set.add(str(gold_ans))
 
         # add set of answers to list of answers
         gold_list_of_answers.append(gold_answer_set)
@@ -233,6 +235,9 @@ def formatGoldAnswers(nice_answers):
     return gold_list_of_answers
 
 def formatOurAnswers(our_answers):
+    if our_answers != [] and isinstance(our_answers[0], list):
+        our_answers = our_answers[0]
+
     list_of_answers = []
     our_answer_set = set()
     for index in xrange(0, len(our_answers)):
@@ -243,9 +248,9 @@ def formatOurAnswers(our_answers):
                 our_answer_set = set()
 
             for ans in answer:
-                our_answer_set.add(str(ans))
+                our_answer_set.add(str(round(float(ans),2)))
         else:
-            our_answer_set.add(str(answer))
+            our_answer_set.add(str(round(float(answer),2)))
 
     list_of_answers.append(our_answer_set)
 
@@ -267,7 +272,7 @@ def answeredCorrectly(gold_list_of_answers, list_of_answers, strictness="loose")
     return False
 
 def filterResultsToOneAnswer(gathered_answers, question):
-    if len(gathered_answers) <= 1: 
+    if len(gathered_answers) <= 1:
         return formatOurAnswers(gathered_answers)
 
     stats = Counter([str(x) for x in gathered_answers if "/" not in str(x)])  # filter out answers with a '/' sign
@@ -300,6 +305,7 @@ def check_parses():
         succ_solve = 0
         right_answers = 0
         for example in examples:
+            # if example['text'] != "example...": continue
             parses = grammar.parse_input(preprocess(example['text']))
             gold_list_of_answers = formatGoldAnswers(example["nice_answers"])
             if len(parses) > 0:
@@ -330,9 +336,23 @@ def check_parses():
                 else:
                     print "\t", "We got the problem wrong :(\n"
 
+        success_parses = 100. * succ_parse / (len(examples))
+        success_solve = 100. * succ_solve / (len(examples))
+        print "success parses", success_parses
+        print "success solve", success_solve
+        return success_parses, success_solve
 
-        print "success parses", 100. * succ_parse / (len(examples))
-        print "success solve", 100. * succ_solve / (len(examples))
+def multiple_runs():
+    total_success_parses = 0
+    total_success_solves = 0
+    for x in range(0, 10):
+        temp_success_parses, temp_success_solves = check_parses()
+        total_success_parses += temp_success_parses
+        total_success_solves += temp_success_solves
+        print "Done with another iteration"
+
+    print "\n\nTotal success parses: ", total_success_parses / 10
+    print "\n\nTotal success solves: ", total_success_solves / 10
 
 if __name__ == "__main__":
     domain = WordProbDomain()
@@ -340,7 +360,10 @@ if __name__ == "__main__":
 
     input = " ".join(sys.argv[1:])
     if '--check-parses' in sys.argv:
-        check_parses()
+        if '--check-parses-total' in sys.argv:
+            multiple_runs()
+        else:
+            check_parses()
     elif input:
         text = preprocess(input)
         print text

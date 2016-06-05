@@ -71,7 +71,7 @@ class SympySolver():
 
 		if isinstance(answers, dict):
 			try:
-				return sorted([v for k, v in answers.iteritems() if k.name[0] == 'v'])
+				return sorted([v for k, v in answers.iteritems() if k.name[0] == 'v' and k.name[0] != "k"])
 			except:
 				# Impossible to know for sure, but this probably means we didn't find an answer
 				return []
@@ -80,8 +80,19 @@ class SympySolver():
 			if len(answers) != 0 and ("v" in str(answers) or "I" in str(answers)):
 				# answer contains a variable or is not real
 				return []
-			
-			return answers
+
+			if Symbol('k') in symbols:
+				new_answers = []
+				for ans in answers:
+					temp = []
+					# the k variable should be the first index, so we skip it
+					for index in range(1, len(ans)):
+						temp.append(ans[index])
+					new_answers.append(tuple(temp))
+				return new_answers
+			else:
+				# no variable 'k' in the answers
+				return answers
 
 	def count_variables(self, eqns):
 		observed_vars = set()
