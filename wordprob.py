@@ -193,7 +193,6 @@ class WordProbDomain(Domain):
         final_eqns = [convertSemanticsToEqn(semantic, count) for semantic in semantics]
         if consecutive:
             final_eqns.extend(getConsecutiveConstraints(count, consecutive, even))
-        print final_eqns, count
 
         num_vars = solver.count_variables(final_eqns)
         answers = solver.our_evaluate(final_eqns, count, consecutive, "-")
@@ -287,33 +286,37 @@ def check_parses():
                 succ_parse += 1
                 empty_answer = True
                 right_answer_check = False
+                gathered_answers = []
                 for _, v in {str(s): s for s in [p.semantics for p in parses]}.iteritems():
                     try:
-                        answer = domain.execute(v)
-                        print example['text']
-                        print "\t", "Our answer(s): " + str(answer)
-                        print "\t", "Gold answer(s): " + str(example["nice_answers"])
-                        if answeredCorrectly(gold_list_of_answers, formatOurAnswers(answer), 'loose'):
-                            right_answer_check = True
+                        gathered_answers.append(domain.execute(v))
                     except Exception as e:
                         print example['text']
                         import traceback; print traceback.format_exc()
                         raise e
-                    if len(answer) != 0:
-                        empty_answer = False
-                if empty_answer == False:
-                    succ_solve += 1
-                    if right_answer_check == True:
-                        print "The question: " + example["text"]
-                        print "Got this question right!\n"
-                        right_answers += 1
-                    else:
-                        print "The question: " + example["text"]
-                        print "Got this question wrong :(\n"
+                    # if len(answer) != 0:
+                    #     empty_answer = False
 
-        print "success parses", 100. * succ_parse / (len(examples))
-        print "success solve", 100. * succ_solve / (len(examples))
-        print "right answers", 100. * right_answers / (len(examples))
+                print example["text"]
+                print "\t", "We generated %s solutions (%s empty)" % \
+                    (len(gathered_answers), len([a for a in gathered_answers if len(a) != 0]))
+                print "\t", "%s of them are correct" % \
+                    len([1 for answer in gathered_answers if answeredCorrectly(gold_list_of_answers, formatOurAnswers(answer), 'loose') == True])
+                print "\t", "Gold answer(s): " + str(example["nice_answers"])
+                print "\t", "Our answer(s): " + str(gathered_answers)
+                # if empty_answer == False:
+                #     succ_solve += 1
+                #     if right_answer_check == True:
+                #         print "The question: " + example["text"]
+                #         print "Got this question right!\n"
+                #         right_answers += 1
+                #     else:
+                #         print "The question: " + example["text"]
+                #         print "Got this question wrong :(\n"
+
+        # print "success parses", 100. * succ_parse / (len(examples))
+        # print "success solve", 100. * succ_solve / (len(examples))
+        # print "right answers", 100. * right_answers / (len(examples))
 
 if __name__ == "__main__":
     domain = WordProbDomain()

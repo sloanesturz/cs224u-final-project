@@ -62,7 +62,6 @@ class SympySolver():
 
 	def our_evaluate(self, final_eqns, num_variables, is_consecutive, op):
 		sympy_exprs = convertToSympyExprs(final_eqns, op)
-		print sympy_exprs
 		if sympy_exprs == "Error thrown" or ">" in str(sympy_exprs) or "<" in str(sympy_exprs):
 			# we can't yet handle questions that contain less than or greater than
 			return []
