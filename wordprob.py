@@ -3,9 +3,12 @@ import json
 import sys
 
 from collections import defaultdict
+from collections import Counter
 import collections
 from numbers import Number
 from itertools import chain, product
+import operator
+from random import randint
 
 from domain import Domain
 from example import Example
@@ -248,7 +251,7 @@ def formatOurAnswers(our_answers):
 
     return list_of_answers
 
-def answeredCorrectly(gold_list_of_answers, list_of_answers, strictness):
+def answeredCorrectly(gold_list_of_answers, list_of_answers, strictness="loose"):
     for gold_answer_set in gold_list_of_answers:
         for our_answer_set in list_of_answers:
             if strictness == 'tight':
@@ -262,6 +265,33 @@ def answeredCorrectly(gold_list_of_answers, list_of_answers, strictness):
                     return True
 
     return False
+
+def filterResultsToOneAnswer(gathered_answers, question):
+    if len(gathered_answers) <= 1: 
+        return formatOurAnswers(gathered_answers)
+
+    stats = Counter([str(x) for x in gathered_answers if "/" not in str(x)])  # filter out answers with a '/' sign
+    top_answers = [key for key,val in stats.iteritems() if val == max(stats.values())]
+
+    our_answer_set = set()
+    if len(top_answers) == 1:
+        # we only have one answer: we can convert it to the right format
+        our_final_answer = []
+        [our_final_answer.append(x) for x in gathered_answers if str(x) in top_answers and x not in our_final_answer]
+        our_answer_set = formatOurAnswers(our_final_answer)
+    else:
+        # we need to narrow down our answers
+        our_final_answers = []
+        # general metrics to filter results: if we see a '-' in an answer, we'don't include that answer
+        [our_final_answers.append(x) for x in gathered_answers if str(x) in top_answers and "-" not in str(x) and x not in our_final_answers]
+        if len(our_final_answers) > 1:
+            # if we still have too many, we randomnly guess
+            random_index = randint(0,len(our_final_answers) - 1)
+            our_final_answers = our_final_answers[random_index]
+
+        our_answer_set = formatOurAnswers(our_final_answers)
+
+    return our_answer_set
 
 def check_parses():
     with open('curated-data/non-yahoo-questions-dev-no-repetitions.json') as f:
@@ -280,24 +310,29 @@ def check_parses():
                 for _, v in {str(s): s for s in [p.semantics for p in parses]}.iteritems():
                     try:
                         answer = domain.execute(v)
+                        # don't include empty answers in our list of gathered_answers
                         if len(answer) != 0: gathered_answers.append(answer)
                     except Exception as e:
                         print example['text']
                         import traceback; print traceback.format_exc()
                         raise e
 
-                num_correct = len([1 for answer in gathered_answers if answeredCorrectly(gold_list_of_answers, formatOurAnswers(answer), 'loose') == True])
+                our_best_result = filterResultsToOneAnswer(gathered_answers, example["text"])
+
                 print example["text"]
+                print "\t", "Gold answer(s): " + str(gold_list_of_answers)
                 print "\t", "We generated %s solutions" % len(gathered_answers)
-                print "\t", "%s of them are correct" % num_correct
-                print "\t", "Gold answer(s): " + str(example["nice_answers"])
                 print "\t", "Our answer(s): " + str(gathered_answers)
-                if num_correct > 0:
+                print "\t", "Our best answer: " + str(our_best_result)
+                if answeredCorrectly(gold_list_of_answers, our_best_result):
+                    print "\t", "Our best answer was correct!!!!!!!\n"
                     succ_solve += 1
+                else:
+                    print "\t", "We got the problem wrong :(\n"
+
 
         print "success parses", 100. * succ_parse / (len(examples))
         print "success solve", 100. * succ_solve / (len(examples))
-        # print "right answers", 100. * right_answers / (len(examples))
 
 if __name__ == "__main__":
     domain = WordProbDomain()
