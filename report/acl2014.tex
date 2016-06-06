@@ -248,7 +248,7 @@ Once our semantic parser generates a semantic representation of a question, the 
         \\
         \hline
     \end{tabularx}
-    \caption{Worked examples}
+    \caption{Worked examples of input text, s-expressions, and semantic equations}
     \label{tab:s-expr-examples}
 \end{table*}
 
@@ -258,24 +258,26 @@ The table above highlights the difficulties with some of the more complicated pa
 For a given question, our set of grammar rules comes up with upwards of 128 different parses. Our executor then takes those parses, tries to turn them into equations, and solves them using Sympy. After this step, we are often left with multiple answers for the question. In order to choose a right answer, we follow a couple of guidelines. First, we need to weed out the non-real answers. Any answers in terms of the complex number i or variables still present are removed from the set of answers. These types of answers occur because that parse was incorrect -- since we know that non-real numbers and underdefined systems are not part of the domain’s solution space, we can easily reject those parses as spurious. Next, we sort the answers by the number of occurrences in the answer set. If there is a most popular answer, we choose that one. If not, we continue to filter the answers further down to the set of most popular. Afterwards, we check if the answers are positive or negative. If the question text doesn’t contain the ``negative'' word, we remove all negative answers from our set of answers. Lastly, if we still have more than one answer left, we randomly pick the an answer out of the set.
 Although this methodology is crude and simple, it does remarkably well within this domain, helping us get an accuracy of 78.3\% on questions that we found parses for. The questions we got wrong (21.7\%) were a mixture of incorrect parses or random guesses where we had the right answer, but we guessed the wrong one.
 
-\begin{figure}[t]
-    \centering
-    \includegraphics[width=0.85\textwidth]{rules-bottom.png}
-    \caption{The number of rules with the given left-hand side. The top two are ommitted.}
-    \label{fig:chart}
-\end{figure}
-
 \section{Discussion}
 The system presented here is an excellent example of applying semantic parsing to a complex and real-world domain. It represents both the positive aspects of using semantic parsing in addition to the challenges that are inherent to the tool and fundamentally limit its practical use. We explore both these facets in detail. Semantic parsing is quick to get started, and once the first input is parsed, huge swaths of the new examples in the corpus can be properly parsed each time a single additional rule is added. This ability to get moving quickly with no training data is a boon to researchers and professional users of NLP technology. We experienced this ourselves, as the first 25\% of the corpus was parsed with only a handful of clever and basic rules.
 
 Out of the 6240 rules, a full 89\% are just the positive and negative numbers between -1000 and 1000 written out in numerals and in words (in a few different forms). Another 404 are in the so-called \$Junk category -- a catchall for any word in the vocabulary that we deem as unimportant. These words usually show up in the preamble or epilogue of a question: ``Two numbers sum to six and have a product of eight. Find the numbers''. Although these rules make up the vast, vast majority of the total grammar rules in SippyCup, they represent an incredibly small fraction of developer time. Included in this report as Figure \ref{fig:chart} is a graph of which parsing tokens appear the most often on the left-hand side.  The graph shows the classic ``long tail'' of rules -- many rules appear only once or twice on the right hand side (although this is mostly an artifact of SippyCup, which prevents nonterminals and terminals from both being on the right of one grammar rule). The top two classes (\$Num and \$Junk are excluded, since they are both more than an order of magnitude larger than the next class).
+
+\begin{figure*}[t]
+    \centering
+    \includegraphics[width=0.85\textwidth]{rules-bottom.png}
+    \caption{The number of rules with the given left-hand side. The top two are ommitted, as they were not hand-written.}
+    \label{fig:chart}
+\end{figure*}
 
 Reaching our parse percentage of 48.3\% required 225 handwritten rules specific to this domain, each one invented by manually inspecting development set questions to come up with clever ways to generically capture specific semantic meaning. While 225 rules seems like a small amount, this required significant investment. As more semantic parsing rules are written and rule authors take advantage of all the ``quick wins,'' the marginal parsing value from each rule is low. Adding another 225 handwritten rules would likely struggle to parse an additional significant portion of the dataset.
 Semantic parsing breaks when a large portion of text is unconventional or breaks from the domain’s usual pattern substantially. The system described here performs admirably when tasked with solving ``regular''-sounding algebra word problems. However, no matter how many rules, semantic parsing in its current form will never be able provide a parse to ever example in its domain -- natural language is simply too complex to be constrained to the same types of context-free grammar rules used to describe compiler operations.
 
 
 \section{Conclusion}
-Text
+Our implementation of a SippyCup-based semantic parsing solution for solving simple word problems provides similar results to those of the current state of the art and reinforces the notion that while initially promising, semantic parsing does not lend itself to creating a robust solution system with a highly variable domain. Our recall percentage and accuracy is lower than that of SigmaDolphin, currently the most sophisticated semantic parsing solution to this problem. However, we have only 65\% the number of rules that SigmaDolphin implements, which indicates that after the initial rules are completed, the marginal cost for each additional successful parse is quite high.
+
+Given a correct parse, the accuracy demonstrated by our system and SigmaDolphin represent the fact that semantic parsing is still extremely accurate. Significant future work should be invested into systems that combine semantic parsing with other, more automatic or statistical methods of NLP that will hopefully result in a hybrid combination of semantic parsing’s accuracy and statistical methods ability to generalize across a varied domain.
 
 % include your own bib file like this:
 %\bibliographystyle{acl}
