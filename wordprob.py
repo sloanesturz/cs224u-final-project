@@ -60,7 +60,7 @@ def find_number_variables(text):
 
 def replace_ambiguity(text):
     prefix = ['their', 'whose']
-    op = ['sum', 'difference', 'product']
+    op = ['sum', 'difference', 'product', 'average']
 
     consecutive, even, count = find_number_variables(text)
 
