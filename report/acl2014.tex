@@ -19,6 +19,7 @@
 \usepackage{times}
 \usepackage{url}
 \usepackage{latexsym}
+\usepackage{hyperref}
 
 \usepackage{multirow}
 \usepackage{tikz}
@@ -278,6 +279,9 @@ Semantic parsing breaks when a large portion of text is unconventional or breaks
 Our implementation of a SippyCup-based semantic parsing solution for solving simple word problems provides similar results to those of the current state of the art and reinforces the notion that while initially promising, semantic parsing does not lend itself to creating a robust solution system with a highly variable domain. Our recall percentage and accuracy is lower than that of SigmaDolphin, currently the most sophisticated semantic parsing solution to this problem. However, we have only 65\% the number of rules that SigmaDolphin implements, which indicates that after the initial rules are completed, the marginal cost for each additional successful parse is quite high.
 
 Given a correct parse, the accuracy demonstrated by our system and SigmaDolphin represent the fact that semantic parsing is still extremely accurate. Significant future work should be invested into systems that combine semantic parsing with other, more automatic or statistical methods of NLP that will hopefully result in a hybrid combination of semantic parsing’s accuracy and statistical methods ability to generalize across a varied domain.
+
+\section{Code}
+The code for this project is available at \url{https://github.com/sloanesturz/cs224u-final-project}.
 
 % include your own bib file like this:
 %\bibliographystyle{acl}

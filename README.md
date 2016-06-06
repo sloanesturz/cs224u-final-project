@@ -1,3 +1,8 @@
+<h1>CS 224U Final Project</h1>
+<h3>John Newcomb and Sloane Sturzenegger</h3>
+
+<p>We forked off the SippyCup repository to do our final project in CS244U in Spring 2016. Below is the rest of the SippyCup README.</p>
+
 <table>
 <tr>
 
