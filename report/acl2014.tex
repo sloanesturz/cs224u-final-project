@@ -20,9 +20,11 @@
 \usepackage{url}
 \usepackage{latexsym}
 
+\usepackage{multirow}
 \usepackage{tikz}
-
 \usetikzlibrary{shapes.geometric, arrows}
+
+\usepackage{tabularx}
 
 %\setlength\titlebox{5cm}
 
@@ -117,7 +119,54 @@ x = 8, y = 3
 
 Our dataset is split into a development and test corpus. We used the 269 questions in the development set to design grammar rules and to train the features for semantic parsing. We then evaluated our performance on the test set after building the entire system and getting satisfactory results on the development corpus.
 
-The example worked through above is an extremely simplified version of what our actual system does for a given word problem. The actual flow is described in FIGURE ??. The bolded sections represent a component built for this project and are detailed in this report.
+The example worked through above is an extremely simplified version of what our actual system does for a given word problem. The actual flow is described in Figure \ref{fig:flowchart}. The bolded sections represent a component built for this project and are detailed in this report.
+
+\begin{figure}[!p]
+    \begin{minipage}[t][\textheight]{\columnwidth}
+        \centering
+        \begin{tikzpicture} [
+            auto,
+            decision/.style = { diamond, draw=blue, thick, fill=blue!20,
+                                text width=7em, text badly centered,
+                                inner sep=1pt, rounded corners },
+            block/.style    = { rectangle, draw=blue, thick,
+                                fill=blue!20, text width=10em, text centered,
+                                rounded corners, minimum height=2em },
+            line/.style     = { draw, thick, ->, shorten >=2pt },
+          ]
+          \matrix [column sep=5mm, row sep=5mm] {
+            & \node (in1) [block, ] {Input Text}; & \\
+            & \node (pro1) [decision] {\textbf{Preprocessor}}; & \\
+            & \node (in2) [block] {Parsable Text}; & \\
+            & \node (pro2) [decision] {\textbf{Parser}}; & \\
+            & \node (in3) [block] {Potential Parses \& \\ Semantic Repr.}; & \\
+            & \node (pro3) [decision] {\textbf{Semantic Executor}}; & \\
+            & \node (in4) [block] {Potential Results}; & \\
+            & \node (pro4) [decision] {\textbf{Results Filter}}; & \\
+            & \node (dec1) [block] {Final Hypothesis}; & \\
+          };
+
+            \draw [line] (in1) edge (pro1);
+            \draw [line] (pro1) edge (in2);
+            \draw [line] (in2) edge (pro2);
+            \draw [line] (pro2) edge (in3);
+            \draw [line, bend right] (pro2) edge (in3);
+            \draw [line, bend left] (pro2) edge (in3);
+            \draw [line] (in3) edge (pro3);
+            \draw [line, bend right] (in3) edge (pro3);
+            \draw [line, bend left] (in3) edge (pro3);
+            \draw [line] (pro3) edge (in4);
+            \draw [line, bend right] (pro3) edge (in4);
+            \draw [line, bend left] (pro3) edge (in4);
+            \draw [line] (in4) edge (pro4);
+            \draw [line, bend right] (in4) edge (pro4);
+            \draw [line, bend left] (in4) edge (pro4);
+            \draw [line] (pro4) edge (dec1);
+        \end{tikzpicture}
+        \caption{Flow of data through our semantic parsing and solving engine.}
+        \label{fig:flowchart}
+    \end{minipage}
+\end{figure}
 
 \subsection{Preprocessor}
 
@@ -139,26 +188,69 @@ Building off the integer rules, we added many rules related to junk words, like 
 We are particularly proud of the way we handled terms like ``the largest number'' in examples such as ``the smallest plus the largest equals 25.'' In this situation, the semantic parser can’t know if ``the largest'' is the second, third, fourth, or five-hundredth variable in this equation. Throughout the examples in this paper, we’ve used common variable names like x and y, but in the parser, we use variables called ``v0'' up through ``vN.'' When parsing something like ``the largest'' or ``the second largest'' we can pretend as though there is a variable called ``v-1'' and ``v-2''. At the end, during semantic evaluation, we can replace ``v-1'' with whatever ``N-1'' is for this particular series of equations. This is one place where we correct incomplete local data with the correct, globally consistent semantic meaning later on.
 
 \subsection{Semantic Executor}
-Once our semantic parser generates a semantic representation of a question, the next step is to take that representation (a s-expression) and turn it into a string equation that can be fed into Sympy. As mentioned above, the recursive structure of s-expressions lends itself to well to this task. Surprisingly, we encountered a lot of difficulty at this stage. For example, if we look at the following couple of simple s-expressions,
+Once our semantic parser generates a semantic representation of a question, the next step is to take that representation (a s-expression) and turn it into a string equation that can be fed into Sympy. As mentioned above, the recursive structure of s-expressions lends itself to well to this task. Surprisingly, we encountered a lot of difficulty at this stage. For example, if we look at a few example s-expressions in Table ~\ref{tab:s-expr-examples}, it quickly becomes apparent that we need to distinguish between unary (abs(), \string^2, \string^3) and binary (+, -, *, and /) relations as well as be flexible with the number of possible operands for a given operator and honoring the correct order of operations.
 
-\begin{center}
+\begin{table*}[t]
+    \centering
     \begin{tabular}{|c|c|}
         \hline
         \textbf{S-expression} & \textbf{String Equation} \\ \hline
-        (= x (+ 5 y))  & x = 5 + y \\ \hline
-        (= x (\string^ 2 5))  & x = 5\string^2  \\ \hline
-        (= x (+ 10 5 (* 5 y))) & x = 10 + 5 + 5*y \\ \hline
-        (= x (* (10 (+ 5 y)))) & X = (5 + y) * 10 \\ \hline
+        \texttt{(= x (+ 5 y)) } & \texttt{ x = 5 + y} \\ \hline
+        \texttt{(= x (\string^ 2 5)) } & \texttt{ x = 5\string^2 } \\ \hline
+        \texttt{(= x (+ 10 5 (* 5 y)))} & \texttt{ x = 10 + 5 + 5*y} \\ \hline
+        \texttt{(= x (* (10 (+ 5 y))))} & \texttt{ X = (5 + y) * 10} \\ \hline
     \end{tabular}
-\end{center}
+    \caption{Example s-expressions.}
+    \label{tab:s-expr-examples}
+\end{table*}
 
-It quickly becomes apparent that we need to distinguish between unary (abs(), \string^2, \string^3) and binary (+, -, *, and /) relations as well as be flexible with the number of possible operands for a given operator and honoring the correct order of operations.
-
-\begin{center}
-    TODO - build big table :(
-    \begin{tabular}{|c|c|c|}
-    \end{tabular}
-\end{center}
+\begin{table*}[t]
+    \centering
+    \begin{tabularx}{\linewidth}{|X|X|X|}
+        \hline
+        \textbf{Question} & \textbf{Our Parse} & \textbf{Correct Parse} \\ \hline
+        The difference of the reciprocals of two consecutive integers is 1/72. Find the smaller of the two integers
+        &
+        \small {\texttt{(= (/ 1 72) (- ((\string^(-1) y) (\string^(-1), x))) } }\newline
+        \small {\texttt{(= x x) } }\newline
+        \small {\texttt{(= y (+ x 1))}}
+        &
+        \small {\texttt{(= (/ 1 72) (- ((\string^(-1) x) (\string^(-1), y))) } }\newline
+        \small {\texttt{(= x x) } }\newline
+        \small {\texttt{(= y (+ x 1))}}
+        \\
+        % empty
+        &
+        \small {\texttt{(1/y)-(1/x) = (1/72) } }\newline
+        \small {\texttt{y = x + 1 } }\newline
+        \small {\texttt{No real answer!}}
+        &
+        \small {\texttt{(1/x)-(1/y) = (1/72) } }\newline
+        \small {\texttt{x = x, y = x + 1 } }\newline
+        \small {\texttt{x = -9 or x = 8} }
+        \\
+        \hline
+        The difference of the squares of two positive consecutive even integers is 44. Find the integers
+        &
+        \small{ \texttt{(= (- ((\string^2 y), (\string^2 y))), 44) }} \newline
+        \small{ \texttt{(= x (* 2 k) }} \newline
+        \small{ \texttt{(= y (+ (* 2 k) 2)) }}
+        &
+        \textbf{We parsed this problem \newline correctly}
+        \\
+        % empty
+        &
+        \small{ \texttt{ (y\string^2)-(x\string^2) = 44}} \newline
+        \small{ \texttt{ x = 2*k, y = 2*k + 2}} \newline
+        \small{ \texttt{ k = 5, x = 10, y = 12}}
+        &
+        % empty
+        \\
+        \hline
+    \end{tabularx}
+    \caption{Worked examples}
+    \label{tab:s-expr-examples}
+\end{table*}
 
 The table above highlights the difficulties with some of the more complicated parses. For instance, imagine we are trying to create a general rule tailored around the word ``difference''. In most cases, if we see the sentence ``the difference of x and y is 72'', the translation can be the equation: (y - x) = 72. We can see this logic working in the second example above. The problem is that this won’t always generate real answers. One possible solution is to generate a lot more parses, interpreting the same question in multiple ways. For example, we could choose to parse ``the difference of x and y is 72'' as both (y - x) = 72 and (x -y) = 72 or just as abs(x - y) = 72. Yet, this ``solution'' only pushes back the problem to the result picker phase and can add wrong parses to the ``difference'' problems. We still need the additional context of the sentence to determine which answer we need. The second example points us in the right direction with the ``two positive consecutive even integers''. The first example doesn’t give us any constraints and would accept both positive and negative numbers. We, however, kept parsing ``difference'' questions as (x - y) due to the fact that this largely gave us the right answer and  did not require even more processing of the question. It should be noted that tackling these types of semantic particulars is important for a state of the art parser and would definitely be a good avenue for future work. After the string equation is formed from the parse, it is relatively simply to feed in the result into Sympy’s solver method and get the result or results out.
 
@@ -166,55 +258,36 @@ The table above highlights the difficulties with some of the more complicated pa
 For a given question, our set of grammar rules comes up with upwards of 128 different parses. Our executor then takes those parses, tries to turn them into equations, and solves them using Sympy. After this step, we are often left with multiple answers for the question. In order to choose a right answer, we follow a couple of guidelines. First, we need to weed out the non-real answers. Any answers in terms of the complex number i or variables still present are removed from the set of answers. These types of answers occur because that parse was incorrect -- since we know that non-real numbers and underdefined systems are not part of the domain’s solution space, we can easily reject those parses as spurious. Next, we sort the answers by the number of occurrences in the answer set. If there is a most popular answer, we choose that one. If not, we continue to filter the answers further down to the set of most popular. Afterwards, we check if the answers are positive or negative. If the question text doesn’t contain the ``negative'' word, we remove all negative answers from our set of answers. Lastly, if we still have more than one answer left, we randomly pick the an answer out of the set.
 Although this methodology is crude and simple, it does remarkably well within this domain, helping us get an accuracy of 78.3\% on questions that we found parses for. The questions we got wrong (21.7\%) were a mixture of incorrect parses or random guesses where we had the right answer, but we guessed the wrong one.
 
+\begin{figure}[t]
+    \centering
+    \includegraphics[width=0.85\textwidth]{rules-bottom.png}
+    \caption{The number of rules with the given left-hand side. The top two are ommitted.}
+    \label{fig:chart}
+\end{figure}
+
 \section{Discussion}
 The system presented here is an excellent example of applying semantic parsing to a complex and real-world domain. It represents both the positive aspects of using semantic parsing in addition to the challenges that are inherent to the tool and fundamentally limit its practical use. We explore both these facets in detail. Semantic parsing is quick to get started, and once the first input is parsed, huge swaths of the new examples in the corpus can be properly parsed each time a single additional rule is added. This ability to get moving quickly with no training data is a boon to researchers and professional users of NLP technology. We experienced this ourselves, as the first 25\% of the corpus was parsed with only a handful of clever and basic rules.
-Included in this report is a table of which parsing tokens appear the most often on the left-hand side. Out of the 6240 rules, a full 89\% are just the positive and negative numbers between -1000 and 1000 written out in numerals and in words (in a few different forms). The graph shows the classic ``long tail'' of rules -- many rules appear only once or twice on the right hand side (although this is mostly an artifact of SippyCup, which prevents nonterminals and terminals from both being on the right of one grammar rule). Another 404 are in the so-called \$Junk category -- a catchall for any word in the vocabulary that we deem as unimportant. These words usually show up in the preamble or epilogue of a question: ``Two numbers sum to six and have a product of eight. Find the numbers''. Although these rules make up the vast, vast majority of the total grammar rules in SippyCup, they represent an incredibly small fraction of developer time.
+
+Out of the 6240 rules, a full 89\% are just the positive and negative numbers between -1000 and 1000 written out in numerals and in words (in a few different forms). Another 404 are in the so-called \$Junk category -- a catchall for any word in the vocabulary that we deem as unimportant. These words usually show up in the preamble or epilogue of a question: ``Two numbers sum to six and have a product of eight. Find the numbers''. Although these rules make up the vast, vast majority of the total grammar rules in SippyCup, they represent an incredibly small fraction of developer time. Included in this report as Figure \ref{fig:chart} is a graph of which parsing tokens appear the most often on the left-hand side.  The graph shows the classic ``long tail'' of rules -- many rules appear only once or twice on the right hand side (although this is mostly an artifact of SippyCup, which prevents nonterminals and terminals from both being on the right of one grammar rule). The top two classes (\$Num and \$Junk are excluded, since they are both more than an order of magnitude larger than the next class).
+
 Reaching our parse percentage of 48.3\% required 225 handwritten rules specific to this domain, each one invented by manually inspecting development set questions to come up with clever ways to generically capture specific semantic meaning. While 225 rules seems like a small amount, this required significant investment. As more semantic parsing rules are written and rule authors take advantage of all the ``quick wins,'' the marginal parsing value from each rule is low. Adding another 225 handwritten rules would likely struggle to parse an additional significant portion of the dataset.
 Semantic parsing breaks when a large portion of text is unconventional or breaks from the domain’s usual pattern substantially. The system described here performs admirably when tasked with solving ``regular''-sounding algebra word problems. However, no matter how many rules, semantic parsing in its current form will never be able provide a parse to ever example in its domain -- natural language is simply too complex to be constrained to the same types of context-free grammar rules used to describe compiler operations.
 
 
 \section{Conclusion}
-
-
-
-\subsection{Electronically-available resources}
+Text
 
 % include your own bib file like this:
 %\bibliographystyle{acl}
 %\bibliography{acl2014}
-
+%
 \begin{thebibliography}{}
-
+% %  Example
 \bibitem[\protect\citename{Aho and Ullman}1972]{Aho:72}
 Alfred~V. Aho and Jeffrey~D. Ullman.
 \newblock 1972.
 \newblock {\em The Theory of Parsing, Translation and Compiling}, volume~1.
 \newblock Prentice-{Hall}, Englewood Cliffs, NJ.
-
-\bibitem[\protect\citename{{American Psychological Association}}1983]{APA:83}
-{American Psychological Association}.
-\newblock 1983.
-\newblock {\em Publications Manual}.
-\newblock American Psychological Association, Washington, DC.
-
-\bibitem[\protect\citename{{Association for Computing Machinery}}1983]{ACM:83}
-{Association for Computing Machinery}.
-\newblock 1983.
-\newblock {\em Computing Reviews}, 24(11):503--512.
-
-\bibitem[\protect\citename{Chandra \bgroup et al.\egroup }1981]{Chandra:81}
-Ashok~K. Chandra, Dexter~C. Kozen, and Larry~J. Stockmeyer.
-\newblock 1981.
-\newblock Alternation.
-\newblock {\em Journal of the Association for Computing Machinery},
-  28(1):114--133.
-
-\bibitem[\protect\citename{Gusfield}1997]{Gusfield:97}
-Dan Gusfield.
-\newblock 1997.
-\newblock {\em Algorithms on Strings, Trees and Sequences}.
-\newblock Cambridge University Press, Cambridge, UK.
-
 \end{thebibliography}
 
 \end{document}
