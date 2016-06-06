@@ -14,6 +14,6 @@ counts, name = zip(*s)
 
 # make the graph
 plt.xticks(x, name, rotation='vertical')
-plt.semilogy(x, counts)
+plt.plot(x, counts)
 plt.tight_layout()
 plt.show() # save from GUI
